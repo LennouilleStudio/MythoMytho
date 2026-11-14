@@ -6,7 +6,7 @@ import { Backdrop } from './Backdrop';
 import { ThemeToggle } from './ThemeToggle';
 import { Wordmark } from './Wordmark';
 
-/** Fond (halo + grille), zones sûres et bouton de thème. */
+/** Fond de table (halo, hachures, cadre, gouttes), zones sûres et bouton de thème. */
 export function Screen({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -16,7 +16,7 @@ export function Screen({ children }: { children: React.ReactNode }): React.JSX.E
       <View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom, paddingLeft: insets.left, paddingRight: insets.right }}>
         {children}
       </View>
-      <ThemeToggle top={Math.max(14, insets.top + 8)} />
+      <ThemeToggle top={Math.max(22, insets.top + 14)} />
     </View>
   );
 }
@@ -24,9 +24,9 @@ export function Screen({ children }: { children: React.ReactNode }): React.JSX.E
 /** Colonne centrée (880 px max) avec le logo en tête, défilante. */
 export function Page({ children, logo = true, maxWidth = 880 }: { children: React.ReactNode; logo?: boolean; maxWidth?: number }): React.JSX.Element {
   const { width } = useWindowDimensions();
-  const pad = width < 600 ? 12 : Math.max(16, Math.min(40, width * 0.04));
+  const pad = width < 600 ? 14 : Math.max(18, Math.min(40, width * 0.04));
   return (
-    <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ alignItems: 'center', paddingTop: pad, paddingHorizontal: Math.max(12, pad / 2), paddingBottom: 60 }}>
+    <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ alignItems: 'center', paddingTop: width < 600 ? 50 : pad + 6, paddingHorizontal: Math.max(20, pad / 2 + 8), paddingBottom: 72 }}>
       <View style={{ width: '100%', maxWidth }}>
         {logo ? <Wordmark /> : null}
         {children}

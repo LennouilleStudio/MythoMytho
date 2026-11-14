@@ -5,6 +5,7 @@ import { BALANCE_TEXT, LONE_HERO_TEXT } from '@/features/balanceTexts';
 import { useSettingsActions } from '@/state/settings';
 import { useTheme } from '@/theme/ThemeProvider';
 import { fonts } from '@/theme/tokens';
+import { Hatch } from '../ui/ornaments';
 import { AppText } from '../ui/primitives';
 import { DashCard } from './DashCard';
 
@@ -48,7 +49,7 @@ export function CompositionGauge({ settings: s }: { settings: GameSettings }): R
   const civils = n - imp;
   const rec = recommendedImpostors(n);
   const v = verdict(s);
-  const vColor = v.tone === 'ok' ? colors.civil : v.tone === 'civil' ? colors.gold : colors.red;
+  const vColor = v.tone === 'impostor' ? colors.bloodHi : colors.accent;
   const pos = balancePosition(imp, n);
   const traitors = (s.roles.fauxfrere ? 1 : 0) + (s.roles.judas ? 1 : 0);
   const fixed = traitors + s.mrWhiteCount + s.espionCount;
@@ -64,12 +65,15 @@ export function CompositionGauge({ settings: s }: { settings: GameSettings }): R
     <DashCard title="Composition" right={<Text style={{ color: vColor, fontFamily: fonts.bold, fontSize: 12.5, textAlign: 'right' }}>{v.label}</Text>}
       hint="Touchez la barre pour régler le nombre d'imposteurs.">
       <View style={{ paddingTop: 14 }}>
-        <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: '50%', width: 0, height: 0, marginLeft: -6, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: colors.text, opacity: 0.85 }} />
-        <View style={{ height: 30, justifyContent: 'center' }}>
-          <View style={{ height: 22, borderRadius: 11, overflow: 'hidden', flexDirection: 'row', backgroundColor: colors.red, boxShadow: '0 0 18px -4px rgba(164,55,42,0.55)' }}>
-            <View style={{ width: `${pos * 100}%`, backgroundColor: colors.civil }} />
+        <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: '50%', width: 0, height: 0, marginLeft: -6, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: colors.accent, opacity: 0.9 }} />
+        <View style={{ height: 32, justifyContent: 'center' }}>
+          {/* Barre : crème hachurée (avantage Civils) contre rouge sang hachuré (avantage imposteurs). */}
+          <View style={{ height: 24, borderRadius: 2, overflow: 'hidden', flexDirection: 'row', backgroundColor: colors.blood, borderWidth: 1.5, borderColor: colors.accent }}>
+            <View style={{ width: `${pos * 100}%`, backgroundColor: colors.accent }}><Hatch color="rgba(14,22,19,0.38)" gap={5} width={1.2} /></View>
+            <View style={{ flex: 1 }}><Hatch color="rgba(241,232,208,0.28)" gap={5} width={1.2} /></View>
           </View>
-          <View pointerEvents="none" style={{ position: 'absolute', left: `${pos * 100}%`, marginLeft: -15, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.paper, borderWidth: 3, borderColor: colors.panel, boxShadow: '0 4px 10px rgba(0,0,0,0.5)' }} />
+          {/* Curseur : losange de parchemin cerclé d'encre. */}
+          <View pointerEvents="none" style={{ position: 'absolute', left: `${pos * 100}%`, marginLeft: -12, width: 24, height: 24, backgroundColor: colors.paper, borderWidth: 3, borderColor: colors.ink, transform: [{ rotate: '45deg' }], boxShadow: '0 4px 10px rgba(0,0,0,0.55)' }} />
           {/* Zones tactiles : une par total d'imposteurs atteignable, découpées aux milieux entre positions voisines. */}
           {totals.map((t, i) => {
             const c = centers[i] ?? 0.5;
@@ -89,8 +93,8 @@ export function CompositionGauge({ settings: s }: { settings: GameSettings }): R
         <AppText tone="muted" size={11}>Avantage imposteurs</AppText>
       </View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <AppText bold size={13} style={{ color: colors.civil }}>{`${civils} ${plural(civils, 'Civil', 'Civils')}`}</AppText>
-        <AppText bold size={13} style={{ color: colors.red }}>{`${imp} ${plural(imp, 'imposteur', 'imposteurs')}`}</AppText>
+        <AppText bold size={13} style={{ color: colors.accent }}>{`${civils} ${plural(civils, 'Civil', 'Civils')}`}</AppText>
+        <AppText bold size={13} style={{ color: colors.bloodHi }}>{`${imp} ${plural(imp, 'imposteur', 'imposteurs')}`}</AppText>
       </View>
       <AppText tone="muted" size={11.5}>{`La barre mesure l'avantage, pas le nombre de joueurs : pour ${n} joueurs, ${rec} ${plural(rec, 'imposteur', 'imposteurs')} (Undercover, Mr. White, Espion et traîtres compris) place le curseur au centre.`}</AppText>
     </DashCard>

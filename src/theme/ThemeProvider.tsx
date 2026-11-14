@@ -22,6 +22,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }): Reac
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
+/**
+ * Impose l'autre palette à un sous-arbre (carte secrète en parchemin quel que soit le thème, bannière de fin toujours sombre) :
+ * tous les composants qu'il contient (texte, boutons…) se recolorent sans rien savoir de cette exception.
+ */
+export function ThemeOverride({ mode, children }: { mode: ThemeMode; children: React.ReactNode }): React.JSX.Element {
+  const parent = useTheme();
+  const value = useMemo(() => ({ mode, colors: palettes[mode], toggle: parent.toggle }), [mode, parent.toggle]);
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
 export function useTheme(): ThemeValue {
   const v = useContext(ThemeContext);
   if (!v) throw new Error('useTheme doit être utilisé sous <ThemeProvider>');

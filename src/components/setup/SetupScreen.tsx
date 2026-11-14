@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { View, useWindowDimensions } from 'react-native';
-import { RULES_TEXT } from '@/features/roleCatalog';
+import { HowToPlay } from './HowToPlay';
 import { promptInstall, watchInstallable } from '@/services/pwa';
 import { useGame } from '@/state/game';
 import { useSettings, useSettingsActions } from '@/state/settings';
@@ -63,7 +63,7 @@ export function SetupScreen(): React.JSX.Element {
             <LinkButton label="Comment jouer" chevron open={rules} onPress={() => setRules((r) => !r)} />
           </View>
         </View>
-        {rules ? <View style={{ marginBottom: 18 }}><AppText tone="muted" size={14.5} style={{ lineHeight: 23 }}>{RULES_TEXT}</AppText></View> : null}
+        {rules ? <View style={{ marginBottom: 26, marginTop: 6 }}><HowToPlay /></View> : null}
         <View style={{ flexDirection: wide ? 'row' : 'column', alignItems: 'flex-start', gap: 18 }}>
           {main}
           {side}

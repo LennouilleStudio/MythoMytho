@@ -56,7 +56,7 @@ export function CustomPairsScreen(): React.JSX.Element {
     <Screen>
       <Page>
         <Dossier>
-          <AppText title size={24} style={{ marginBottom: 6 }}>Mes paires</AppText>
+          <AppText title size={26} style={{ marginBottom: 6 }}>Mes paires</AppText>
           <AppText tone="muted" size={12.5} style={{ marginBottom: 18 }}>{`${customPairs.length}/${MAX_CUSTOM_PAIRS} paires personnalisées. Elles forment le thème « Mes paires ».`}</AppText>
           <View style={{ gap: 12, marginBottom: 18 }}>
             <Field label="Mot des Civils" value={a} onChangeText={setA} maxLength={MAX_WORD_LENGTH} />

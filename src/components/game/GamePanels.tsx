@@ -1,10 +1,15 @@
-import React from 'react';
-import { Pressable, Text, View } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
-import { gameOverText, type Player, type Winner } from '@/domain';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, Text, View } from 'react-native';
+import { gameOverText, playerWon, type Player, type Winner } from '@/domain';
+import { cardIcon } from '@/features/roleMeta';
 import { alive, type GameAction, type GameState } from '@/state/gameReducer';
-import { useTheme } from '@/theme/ThemeProvider';
-import { fonts, radius } from '@/theme/tokens';
+import { ThemeOverride, useTheme } from '@/theme/ThemeProvider';
+import { ART, fonts } from '@/theme/tokens';
+import { CardBackArt, CardFrontArt } from '../ui/CardBack';
+import { RoleTile } from '../ui/RoleTile';
+import { DropStamp } from '../ui/Stamp';
+import { NATIVE, useProgress, useReducedMotion } from '../ui/motion';
+import { DashLine, Frame, Hatch, Plaque, Sparkle, Stitch } from '../ui/ornaments';
 import { AppText, Button, Callout, Panel } from '../ui/primitives';
 
 type D = React.Dispatch<GameAction>;
@@ -17,44 +22,100 @@ export interface BottomActions {
   readonly armed: 'round' | 'game' | null;
 }
 
-/** Inclinaison fixe et douce par carte (comme la rotation aléatoire de l'original, mais stable). */
+/** Inclinaison fixe et douce par carte (cartes posées à la main sur la table, mais stable d'un rendu à l'autre). */
 const tilt = (i: number): number => (((i * 37) % 7) - 3) * 0.85;
 
-function TargetIcon({ color }: { color: string }): React.JSX.Element {
-  return (
-    <Svg width={30} height={30} viewBox="0 0 30 30" fill="none" style={{ opacity: 0.75 }}>
-      <Circle cx={15} cy={15} r={12.5} stroke={color} strokeWidth={1.6} />
-      <Circle cx={15} cy={15} r={7.5} stroke={color} strokeWidth={1.6} />
-      <Circle cx={15} cy={15} r={2.4} fill={color} />
-    </Svg>
-  );
-}
+const CARD_W = 120;
+const S = CARD_W / 300;
+const FLIP_MS = 520;
 
-/** Carte papier inclinée (#n, cible, nom). */
-export function PlayerCard({ player, index, onPress, faded, struck, caption }: {
-  player: Player; index: number; onPress?: () => void; faded?: boolean; struck?: boolean; caption?: string;
+/**
+ * Carte de joueur posée face cachée : dos de tarot (œil), numéro et nom dans les cartouches.
+ * - `flip` : toucher la carte la retourne (rotation 3D, face parchemin) avant d'appeler `onPress` ;
+ * - elle se balance très légèrement sur la table (coupé si l'utilisateur réduit les animations) ;
+ * - `struck` : carte éliminée, œil fermé, tampon « Éliminé » qui s'abat dès que `stampReady`.
+ */
+export function PlayerCard({ player, index, onPress, faded, struck, stampReady = true, flip, caption }: {
+  player: Player; index: number; onPress?: () => void; faded?: boolean; struck?: boolean; stampReady?: boolean; flip?: boolean; caption?: string;
 }): React.JSX.Element {
   const { colors } = useTheme();
+  const reduce = useReducedMotion();
+  const idle = !faded && !struck;
+
+  // Balancement : va-et-vient lent, déphasé d'une carte à l'autre.
+  const sway = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduce || !idle) { sway.setValue(0); return; }
+    const d = 2600 + (index % 4) * 330;
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(sway, { toValue: 1, duration: d, easing: Easing.inOut(Easing.sin), useNativeDriver: NATIVE }),
+      Animated.timing(sway, { toValue: 0, duration: d, easing: Easing.inOut(Easing.sin), useNativeDriver: NATIVE }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [reduce, idle, index, sway]);
+  const t = tilt(index);
+  const swayRot = sway.interpolate({ inputRange: [0, 1], outputRange: [`${t - 0.9}deg`, `${t + 0.9}deg`] });
+  const swayY = sway.interpolate({ inputRange: [0, 1], outputRange: [0, -2.5] });
+
+  // Retournement : 0 → 1 = 0° → 180° ; la face parchemin apparaît à mi-course.
+  const turn = useRef(new Animated.Value(0)).current;
+  const [turning, setTurning] = useState(false);
+  useEffect(() => { if (faded) { turn.setValue(0); setTurning(false); } }, [faded, turn]);
+  const press = (): void => {
+    if (!onPress || turning) return;
+    if (!flip || reduce) { onPress(); return; }
+    setTurning(true);
+    Animated.timing(turn, { toValue: 1, duration: FLIP_MS, easing: Easing.inOut(Easing.cubic), useNativeDriver: NATIVE }).start(({ finished }) => { if (finished) onPress(); });
+  };
+  const rotY = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+  const lift = turn.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -14, -4] });
+  const grow = turn.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.12, 1.06] });
+  const face = { position: 'absolute', top: 0, left: 0, width: CARD_W, height: (CARD_W * 4) / 3, backfaceVisibility: 'hidden', borderRadius: 6, overflow: 'hidden' } as const;
+
   return (
-    <Pressable onPress={onPress} disabled={!onPress || faded} accessibilityRole="button"
-      accessibilityLabel={caption ? `${player.name} — ${caption}` : player.name} accessibilityState={{ disabled: !onPress || !!faded }}
-      style={({ pressed }) => ({
-        width: 100, aspectRatio: 3 / 4, minHeight: 64, backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.paperShade,
-        borderRadius: radius.sm, paddingTop: 10, paddingHorizontal: 6, paddingBottom: 8, alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: pressed ? '0 16px 26px -12px rgba(0,0,0,0.6)' : `0 10px 24px -12px ${colors.shadow}`,
-        opacity: faded ? 0.45 : 1,
-        transform: [{ rotate: pressed ? '0deg' : `${tilt(index)}deg` }, { translateY: pressed ? -4 : 0 }],
-      })}>
-      <Text style={{ alignSelf: 'flex-start', color: colors.inkSoft, fontFamily: fonts.body, fontSize: 10.5, letterSpacing: 0.9 }}>{`#${index + 1}`}</Text>
-      <TargetIcon color={colors.ink} />
-      <Text numberOfLines={1} style={{ color: colors.ink, fontFamily: fonts.body, fontSize: 10.9, textAlign: 'center', maxWidth: '100%', textDecorationLine: struck ? 'line-through' : 'none' }}>{player.name}</Text>
+    <Pressable onPress={press} disabled={!onPress || faded} accessibilityRole="button"
+      accessibilityLabel={caption ? `${player.name} — ${caption}` : player.name} accessibilityState={{ disabled: !onPress || !!faded }}>
+      {({ pressed }) => (
+        <Animated.View style={{ width: CARD_W, height: (CARD_W * 4) / 3, borderRadius: 6, boxShadow: pressed ? '0 18px 28px -12px rgba(0,0,0,0.75)' : `0 12px 24px -12px ${colors.shadow}`, transform: [{ rotate: pressed ? '0deg' : swayRot }, { translateY: pressed ? -4 : swayY }] }}>
+          <Animated.View style={{ width: CARD_W, height: (CARD_W * 4) / 3, opacity: faded || struck ? 0.55 : 1, transform: [{ perspective: 900 }, { translateY: lift }, { scale: grow }, { rotateY: rotY }] }}>
+            <View style={face}>
+              <CardBackArt width={CARD_W} closed={faded || struck} />
+              <View pointerEvents="none" style={{ position: 'absolute', top: 9 * S, left: 92 * S, width: 116 * S, height: 42 * S, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ color: ART.cream, fontFamily: fonts.label, fontSize: 11, letterSpacing: 1.6 }}>{`#${index + 1}`}</Text>
+              </View>
+              <View pointerEvents="none" style={{ position: 'absolute', top: 334 * S, left: 32 * S, width: 236 * S, height: 48 * S, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
+                <Text numberOfLines={1} style={{ color: ART.cream, fontFamily: fonts.label, fontSize: 10, letterSpacing: 1.3, textTransform: 'uppercase', textAlign: 'center', textDecorationLine: struck ? 'line-through' : 'none' }}>{player.name}</Text>
+              </View>
+            </View>
+            {flip ? (
+              <View style={{ ...face, transform: [{ rotateY: '180deg' }] }}>
+                <CardFrontArt width={CARD_W} />
+                <View pointerEvents="none" style={{ position: 'absolute', top: 334 * S, left: 32 * S, width: 236 * S, height: 48 * S, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
+                  <Text numberOfLines={1} style={{ color: ART.green, fontFamily: fonts.label, fontSize: 10, letterSpacing: 1.3, textTransform: 'uppercase' }}>{player.name}</Text>
+                </View>
+              </View>
+            ) : null}
+          </Animated.View>
+          {struck ? (
+            <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+              <DropStamp label="Éliminé" active={!!stampReady} size={13} />
+            </View>
+          ) : null}
+        </Animated.View>
+      )}
     </Pressable>
   );
 }
 
 const CardsRow = ({ children }: { children: React.ReactNode }): React.JSX.Element => (
-  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 30 }}>{children}</View>
+  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 30, paddingTop: 4 }}>{children}</View>
 );
+
+const Rule = (): React.JSX.Element => {
+  const { colors } = useTheme();
+  return <DashLine color={colors.line} style={{ flex: 0, marginBottom: 20 }} />;
+};
 
 export function GameHeader({ state }: { state: GameState }): React.JSX.Element {
   const { colors } = useTheme();
@@ -63,14 +124,17 @@ export function GameHeader({ state }: { state: GameState }): React.JSX.Element {
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
       <View>
-        <AppText title size={25.6}>{`Manche ${state.round}`}</AppText>
-        <AppText tone="gold" size={10.9} style={{ letterSpacing: 1.1, marginTop: 4 }}>{`${n} agents en jeu`}</AppText>
+        <AppText title size={26}>{`Manche ${state.round}`}</AppText>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 5 }}>
+          <Sparkle size={9} color={colors.bloodHi} />
+          <AppText tone="accent" label size={10.8} style={{ letterSpacing: 1.8, textTransform: 'uppercase' }}>{`${n} agents en jeu`}</AppText>
+        </View>
       </View>
       {state.phase === 'reveal' ? (
         <View style={{ minWidth: 180 }}>
           <AppText tone="muted" size={10.5} style={{ textAlign: 'right', marginBottom: 6 }}>{`${seen}/${n} cartes consultées`}</AppText>
-          <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' }}>
-            <View style={{ width: `${n ? (seen / n) * 100 : 0}%`, height: 6, backgroundColor: colors.gold }} />
+          <View style={{ height: 10, borderRadius: 2, backgroundColor: colors.bg, borderWidth: 1.5, borderColor: colors.lineStrong, overflow: 'hidden' }}>
+            <View style={{ width: `${n ? (seen / n) * 100 : 0}%`, height: '100%', backgroundColor: colors.accent }}><Hatch color="rgba(14,22,19,0.4)" gap={4} /></View>
           </View>
         </View>
       ) : null}
@@ -90,29 +154,29 @@ function BottomRow({ actions, extra }: { actions: BottomActions; extra?: React.R
 }
 
 export function RevealPhase({ state, dispatch, actions }: { state: GameState; dispatch: D; actions: BottomActions }): React.JSX.Element {
-  const { colors } = useTheme();
   const all = state.players.length > 0 && state.players.every((p) => p.viewed);
   return (
     <View>
       <Callout>
         <AppText tone="muted" size={12.5} style={{ lineHeight: 20 }}>
-          {'Faites circuler l\'appareil. Chaque joueur clique sur '}<AppText bold tone="muted" size={12.5}>sa propre carte</AppText>
+          {'Faites circuler l\'appareil. Chaque joueur touche '}<AppText bold tone="muted" size={12.5}>sa propre carte</AppText>
           {', mémorise son mot en privé, puis appuie sur « Cacher » avant de transmettre l\'appareil au suivant. Une carte déjà consultée ne peut pas être rouverte.'}
         </AppText>
       </Callout>
       <View style={{ height: 22 }} />
       {all ? (
         <View style={{ marginBottom: 18 }}>
-          <Callout tone="green"><AppText size={12.5} style={{ color: colors.okText, lineHeight: 19 }}>Toutes les cartes ont été consultées. La discussion peut commencer, puis lancez le vote.</AppText></Callout>
+          <Callout tone="ok"><AppText size={12.5} style={{ lineHeight: 19 }}>Toutes les cartes ont été consultées. La discussion peut commencer, puis lancez le vote.</AppText></Callout>
         </View>
       ) : null}
       {/* Le minuteur s'insère ici (voir GameScreen). */}
       <CardsRow>
         {state.players.map((p, i) => (
-          <PlayerCard key={p.id} player={p} index={i} faded={p.viewed} caption={p.viewed ? 'carte vue' : 'toucher pour voir'} onPress={() => dispatch({ type: 'OPEN_CARD', id: p.id })} />
+          <PlayerCard key={p.id} flip player={p} index={i} faded={p.viewed} caption={p.viewed ? 'carte vue' : 'toucher pour voir'} onPress={() => dispatch({ type: 'OPEN_CARD', id: p.id })} />
         ))}
       </CardsRow>
-      <View style={{ borderTopWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(128,128,128,0.35)', paddingTop: 20, gap: 12 }}>
+      <Rule />
+      <View style={{ gap: 12 }}>
         <Button arrow label="Lancer le vote" disabled={!all} onPress={() => dispatch({ type: 'START_VOTE' })} />
         <BottomRow actions={actions} />
       </View>
@@ -121,59 +185,91 @@ export function RevealPhase({ state, dispatch, actions }: { state: GameState; di
 }
 
 export function VotePhase({ state, dispatch, actions }: { state: GameState; dispatch: D; actions: BottomActions }): React.JSX.Element {
-  const { colors } = useTheme();
-  const out = state.players.filter((p) => p.eliminated);
+  const living = alive(state);
+  // Le tampon ne s'abat qu'une fois les fenêtres d'annonce refermées : on le voit tomber sur la carte.
+  const stampReady = state.modal === 'none' && !state.summaryOpen;
   return (
     <View>
-      <AppText title size={19.2} style={{ marginBottom: 6 }}>Vote d'elimination</AppText>
-      <Callout accent="red">
-        <AppText tone="muted" size={12.5} style={{ lineHeight: 20 }}>Le groupe discute, puis désigne d'un commun accord le joueur à éliminer en appuyant sur sa carte.</AppText>
+      <AppText title size={20} style={{ marginBottom: 10 }}>Vote d'élimination</AppText>
+      <Callout accent="blood">
+        <AppText tone="muted" size={12.5} style={{ lineHeight: 20 }}>Le groupe discute, puis désigne d'un commun accord le joueur à éliminer en touchant sa carte.</AppText>
       </Callout>
       <View style={{ height: 18 }} />
-      {out.length > 0 ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-          {out.map((p) => (
-            <View key={p.id} style={{ borderRadius: 999, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.panel, paddingVertical: 5, paddingHorizontal: 12 }}>
-              <Text style={{ color: colors.muted, fontFamily: fonts.body, fontSize: 10.9, textDecorationLine: 'line-through', textDecorationColor: colors.red }}>{p.name}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
       <CardsRow>
-        {state.players.map((p, i) => alive(state).some((a) => a.id === p.id)
-          ? <PlayerCard key={p.id} player={p} index={i} caption="désigner" onPress={() => dispatch({ type: 'ASK_ELIMINATE', id: p.id })} />
-          : null)}
+        {state.players.map((p, i) => {
+          const isAlive = living.some((a) => a.id === p.id);
+          return (
+            <PlayerCard key={p.id} player={p} index={i} struck={!isAlive} stampReady={stampReady} caption={isAlive ? 'désigner' : 'éliminé'}
+              onPress={isAlive ? () => dispatch({ type: 'ASK_ELIMINATE', id: p.id }) : undefined} />
+          );
+        })}
       </CardsRow>
-      <View style={{ borderTopWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(128,128,128,0.35)', paddingTop: 20 }}>
-        <BottomRow actions={actions} extra={<Button variant="ghost" label="Voir tous les rôles" onPress={() => dispatch({ type: 'OPEN_SUMMARY' })} />} />
-      </View>
+      <Rule />
+      <BottomRow actions={actions} extra={<Button variant="ghost" label="Voir tous les rôles" onPress={() => dispatch({ type: 'OPEN_SUMMARY' })} />} />
     </View>
   );
 }
 
-const BANNER: Readonly<Record<Winner, { border: string; bg: string }>> = {
-  civils: { border: 'rgba(92,138,90,0.5)', bg: 'rgba(92,138,90,0.10)' },
-  undercover: { border: 'rgba(164,55,42,0.5)', bg: 'rgba(164,55,42,0.12)' },
-  idiot: { border: 'rgba(182,146,78,0.5)', bg: 'rgba(182,146,78,0.10)' },
-  amoureux: { border: 'rgba(182,146,78,0.5)', bg: 'rgba(182,146,78,0.10)' },
-  mrwhite: { border: 'rgba(182,146,78,0.5)', bg: 'rgba(182,146,78,0.10)' },
+/** Bannière de fin : une carte imprimée, toujours sombre ; les gouttes se multiplient quand les imposteurs l'emportent. */
+const BANNER: Readonly<Record<Winner, { bg: string; stroke: string; drips: number; dripMax: number }>> = {
+  civils: { bg: ART.green, stroke: ART.cream, drips: 0, dripMax: 44 },
+  undercover: { bg: ART.burgundy, stroke: ART.blood, drips: 11, dripMax: 104 },
+  idiot: { bg: ART.violet, stroke: ART.cream, drips: 0, dripMax: 44 },
+  amoureux: { bg: ART.violet, stroke: ART.blood, drips: 3, dripMax: 50 },
+  mrwhite: { bg: ART.green, stroke: ART.cream, drips: 5, dripMax: 70 },
 };
+
+/** Carte révélée en fin de manche : vainqueur en pleine lumière, perdant voilé et barré d'une croix rouge qui s'abat. */
+function RevealedCard({ player, won, size, index }: { player: Player; won: boolean; size: number; index: number }): React.JSX.Element {
+  const { colors } = useTheme();
+  const cross = useProgress(!won, { duration: 320, delay: 500 + index * 110 });
+  const scale = cross.interpolate({ inputRange: [0, 1], outputRange: [2, 1] });
+  return (
+    <View style={{ width: size, gap: 8 }} accessible accessibilityLabel={`${player.name} : ${won ? 'gagnant' : 'perdant'}`}>
+      <View>
+        <RoleTile icon={cardIcon(player, true)} active={won} size={size} />
+        {!won ? (
+          <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', opacity: cross, transform: [{ scale }] }}>
+            <Stitch size={size * 0.78} color={ART.blood} width={3.2} />
+          </Animated.View>
+        ) : null}
+      </View>
+      <Text numberOfLines={1} style={{ color: won ? colors.accent : colors.muted, fontFamily: fonts.label, fontSize: 11, letterSpacing: 1.6, textTransform: 'uppercase', textAlign: 'center', textDecorationLine: player.eliminated ? 'line-through' : 'none', textDecorationColor: colors.bloodHi }}>{player.name}</Text>
+    </View>
+  );
+}
 
 export function GameOverPhase({ state, dispatch, actions, onNextRound }: {
   state: GameState; dispatch: D; actions: BottomActions; onNextRound: () => void;
 }): React.JSX.Element {
+  const { colors } = useTheme();
   if (!state.winner) return <View />;
   const text = gameOverText(state.winner, state.winnerReason, state.winnerDetail, state.players, state.civilWord);
   const mytho = state.players.find((p) => p.mytho);
   const hercule = state.players.find((p) => p.hercule);
   const b = BANNER[state.winner];
+  const winner = state.winner;
   return (
     <View style={{ gap: 16 }}>
-      <View style={{ alignItems: 'center', gap: 10, paddingVertical: 28, paddingHorizontal: 20, borderRadius: radius.md, borderWidth: 1, borderColor: b.border, backgroundColor: b.bg }}>
-        <AppText title size={32} center>{text.title.replace(/ ([!?:;])/g, '\u202F$1')}</AppText>
-        <AppText center tone="muted" size={13.5}>{text.subtitle}</AppText>
-        <AppText center tone="gold" bold size={13}>{`Civils : ${state.civilWord} · Undercover : ${state.undercoverWord}`}</AppText>
-      </View>
+      <ThemeOverride mode="dark">
+        <Frame bg={b.bg} stroke={b.stroke} soft="rgba(217,204,176,0.4)" drips={b.drips > 0} dripCount={b.drips} dripMax={b.dripMax} seed={23} style={{ alignItems: 'center', gap: 12, paddingVertical: 40, paddingHorizontal: 28 }}>
+          <AppText title size={32} center>{text.title.replace(/ ([!?:;])/g, '\u202F$1')}</AppText>
+          <AppText center tone="muted" size={13.5}>{text.subtitle}</AppText>
+          <View style={{ alignSelf: 'stretch' }}><DashLine color="rgba(217,204,176,0.35)" style={{ flex: 0 }} /></View>
+          <AppText center tone="accent" bold size={13}>{`Civils : ${state.civilWord} · Undercover : ${state.undercoverWord}`}</AppText>
+        </Frame>
+      </ThemeOverride>
+
+      <Frame style={{ padding: 22, paddingTop: 30, gap: 14 }}>
+        <View style={{ position: 'absolute', top: -13, left: 20 }}><Plaque label="Les cartes révélées" /></View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'center' }}>
+          {state.players.map((p, i) => (
+            <RevealedCard key={p.id} player={p} index={i} size={118} won={playerWon(p, winner, state.winnerPlayerId)} />
+          ))}
+        </View>
+        <AppText tone="muted" size={11.5} center>Les perdants sont barrés d'une croix ; un nom rayé désigne un joueur éliminé en cours de manche.</AppText>
+      </Frame>
+
       {mytho ? (
         <Panel style={{ gap: 10 }}>
           <AppText bold size={14}>{`Le groupe a-t-il repéré le mensonge de ${mytho.name} ?`}</AppText>

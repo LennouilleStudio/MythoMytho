@@ -19,7 +19,7 @@ export default function Root({ children }: { children: React.ReactNode }): React
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="theme-color" content="#10161a" />
+        <meta name="theme-color" content="#0e1613" />
         <meta name="description" content="MythoMytho — jeu de mots et de bluff entre amis, hors ligne." />
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

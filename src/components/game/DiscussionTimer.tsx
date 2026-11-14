@@ -3,8 +3,8 @@ import { View } from 'react-native';
 import { formatClock } from '@/domain';
 import { buzz, playTimerEnd } from '@/services/feedback';
 import { useTheme } from '@/theme/ThemeProvider';
-import { radius } from '@/theme/tokens';
-import { AppText, Button } from '../ui/primitives';
+import { Hatch } from '../ui/ornaments';
+import { AppText, Button, Callout } from '../ui/primitives';
 
 /** Minuteur de discussion : démarre quand toutes les cartes sont vues, borné par l'horloge (pas de dérive). */
 export function DiscussionTimer({ minutes, sound, active, resetKey, onRunningChange }: {
@@ -50,19 +50,24 @@ export function DiscussionTimer({ minutes, sound, active, resetKey, onRunningCha
 
   if (!started) return null;
   const pct = Math.max(0, Math.min(100, (left / total) * 100));
+  const over = left === 0;
   return (
-    <View style={{ backgroundColor: 'rgba(182,146,78,0.07)', borderWidth: 1, borderColor: 'rgba(182,146,78,0.3)', borderRadius: radius.sm, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 18, gap: 8 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <AppText tone="muted" size={11.2} style={{ letterSpacing: 0.9 }}>{left === 0 ? 'Temps écoulé — place au vote !' : 'Temps de discussion'}</AppText>
-        <AppText bold tone="gold" size={20.8}>{formatClock(left)}</AppText>
-      </View>
-      <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.line, overflow: 'hidden' }}>
-        <View style={{ width: `${pct}%`, height: 4, backgroundColor: left === 0 ? colors.red : colors.gold }} />
-      </View>
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Button small variant="ghost" label={running ? 'Pause' : 'Reprendre'} onPress={toggle} disabled={left === 0} />
-        <Button small variant="ghost" label="+1 min" onPress={extend} />
-      </View>
+    <View style={{ marginBottom: 18 }}>
+      <Callout accent={over ? 'blood' : 'default'}>
+        <View style={{ gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+            <AppText tone={over ? 'blood' : 'muted'} size={11} style={{ letterSpacing: 1.3, textTransform: 'uppercase' }}>{over ? 'Temps écoulé — place au vote !' : 'Temps de discussion'}</AppText>
+            <AppText bold tone={over ? 'blood' : 'accent'} size={22}>{formatClock(left)}</AppText>
+          </View>
+          <View style={{ height: 8, borderRadius: 2, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.bg, overflow: 'hidden' }}>
+            <View style={{ width: `${pct}%`, height: '100%', backgroundColor: over ? colors.blood : colors.accent }}><Hatch color="rgba(14,22,19,0.38)" gap={4} /></View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button small variant="ghost" label={running ? 'Pause' : 'Reprendre'} onPress={toggle} disabled={left === 0} />
+            <Button small variant="ghost" label="+1 min" onPress={extend} />
+          </View>
+        </View>
+      </Callout>
     </View>
   );
 }

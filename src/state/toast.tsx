@@ -23,8 +23,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
       {msg !== null && (
         <View accessibilityLiveRegion="polite"
           style={{ position: 'absolute', left: 16, right: 16, bottom: 28 + insets.bottom, alignItems: 'center', zIndex: 999, pointerEvents: 'none' }}>
-          <View style={{ backgroundColor: colors.ink, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 14, maxWidth: 520 }}>
-            <Text style={{ color: colors.paper, fontFamily: fonts.body, fontSize: 14, textAlign: 'center' }}>{msg}</Text>
+          {/* Double filet façon cadre gravé, sans dépendre de components/ (règle : components → state → domain). */}
+          <View style={{ backgroundColor: colors.panelAlt, borderWidth: 1.5, borderColor: colors.lineStrong, borderRadius: radius.sm, padding: 3, maxWidth: 520, boxShadow: `0 14px 30px -12px ${colors.shadow}` }}>
+            <View style={{ borderWidth: 1, borderColor: colors.line, paddingVertical: 10, paddingHorizontal: 20 }}>
+              <Text style={{ color: colors.text, fontFamily: fonts.body, fontSize: 14, textAlign: 'center' }}>{msg}</Text>
+            </View>
           </View>
         </View>
       )}

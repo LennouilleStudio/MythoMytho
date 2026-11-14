@@ -23,15 +23,28 @@ Mode **sombre par défaut** (le thème se mémorise sous la clé `mythomytho_the
 (`src/components/dashboard/`) : sélecteur de joueurs en piste, jauge de composition Civils ⟷ imposteurs (touchez la barre
 pour régler les imposteurs), jetons de rôles classiques (− / +) et spéciaux (+ / ✕, pastille « ? » pour l'explication),
 thèmes, noms et groupes, minuteur et confidentialité. Deux colonnes dès 980 px de large ; en dessous, une colonne et une
-barre de lancement fixe. Les icônes des 19 rôles sont des SVG (`RoleIcon.tsx`).
+barre de lancement fixe. Les icônes des 19 rôles sont des SVG (`RoleArt.tsx`).
 
-## Design
+## Design : « tarot macabre »
 
-Le design reprend celui de l'application HTML/CSS/JS : fond en dégradé radial avec quadrillage (SVG), logo « Mytho Mytho »
-avec reflet (le SVG d'origine, converti en composant), panneau « dossier » à onglet, blocs numérotés en pointillés,
-compteurs en pilule, cartes de joueur inclinées, modale « carte secrète » à tampon « confidentiel », thème clair/sombre.
-Les composants visuels sont dans `src/components/ui/` ; la palette dans `src/theme/tokens.ts`.
-Dépendance ajoutée : `react-native-svg` (`npx expo install react-native-svg`).
+Toute l'interface reprend le style des illustrations de rôles (`assets/icons/*.svg`) : trait crème parchemin sur fonds vert / violet /
+bordeaux nuit, un seul accent (rouge sang `#8f1d27`), hachures à 45°, double cadre avec étoiles aux angles, cartouches à lettres
+espacées, gouttes de sang effilées et craquelures rouges. Palette stricte dans `src/theme/tokens.ts` (`#d9ccb0`, `#8f1d27`,
+`#0e1613`, `#17101f`, `#240a0d`) ; thèmes **Nuit** (défaut) et **Parchemin** (même gravure à l'encre sur papier ; les cartes restent sombres).
+
+* `src/components/ui/ornaments.tsx` : vocabulaire graphique (`Frame`, `Hatch`, `Plaque`, `Divider`, gouttes, craquelures, étoiles).
+* `Backdrop` : fond de table (halo, hachures, cadre, gouttes). `CardBack` : dos de carte à l'œil (cartes des joueurs).
+* Cartes de rôles : les 19 illustrations d'origine, rendues par `RoleArt` depuis `src/theme/roleArt.ts`, **fichier généré** :
+  après modification d'un SVG de `assets/icons/`, relancer `node scripts/build-role-art.mjs`.
+* `ThemeOverride` impose une palette à un sous-arbre (carte secrète toujours en parchemin, bannière de fin toujours sombre).
+* **Mouvement** (`src/components/ui/motion.ts`) : retournement 3D de la carte du joueur avant la carte secrète, léger balancement des cartes,
+  gouttes qui coulent à l'ouverture et à chaque élimination (`bleed.ts`), tampon « Éliminé » qui s'abat sur la carte. Tout est coupé
+  quand le système demande de réduire les animations (`useReducedMotion`, y compris `prefers-reduced-motion` sur le web).
+* **Textures** : grain de papier sur le parchemin et le fond, vignettage de tranche sur les cartes (`Grain`, `EdgeVignette`).
+* **Fin de manche** : toutes les cartes sont révélées, les perdants barrés d'une croix rouge ; les gouttes se multiplient si les imposteurs gagnent.
+* **Comment jouer** : six étapes illustrées (`setup/HowToPlay.tsx`). **Accueil** : `Splash.tsx` (carte « Le Mytho » + gouttes) et image native `assets/images/splash.png`.
+* **Libellés** : capitales géométriques grasses Outfit (`assets/fonts/Outfit-Bold.ttf`, licence OFL fournie), via `fonts.label`.
+* Icônes d'application et favicons PNG régénérés à partir de la carte « Le Mytho ».
 
 ## Premier lancement : à regarder en priorité
 

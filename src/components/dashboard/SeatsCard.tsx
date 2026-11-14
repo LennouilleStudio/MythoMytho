@@ -5,7 +5,6 @@ import { useLibrary } from '@/state/library';
 import { useSettingsActions } from '@/state/settings';
 import { useToast } from '@/state/toast';
 import { useTheme } from '@/theme/ThemeProvider';
-import { alpha } from '@/theme/color';
 import { fonts } from '@/theme/tokens';
 import { AppText, Button, Field, Segmented } from '../ui/primitives';
 import { DashCard } from './DashCard';
@@ -40,19 +39,19 @@ export function SeatsCard({ names, count, onChange }: {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         {filled.map((n, i) => (
           <View key={i} style={{ flexGrow: 1, flexBasis: 150, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: alpha(colors.gold, 0.16), borderWidth: 1, borderColor: colors.goldSoft, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ color: colors.gold, fontFamily: fonts.bold, fontSize: 12 }}>{i + 1}</Text>
+            <View style={{ width: 30, height: 30, borderRadius: 2, backgroundColor: colors.raised, borderWidth: 1.5, borderColor: colors.lineStrong, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: colors.accent, fontFamily: fonts.bold, fontSize: 12.5 }}>{i + 1}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Field accessibilityLabel={`Nom du joueur ${i + 1}`} value={n} placeholder={`Joueur ${i + 1}`} maxLength={MAX_PLAYER_NAME}
-                onChangeText={(t: string) => onChange(filled.map((x, j) => (j === i ? t : x)))} style={{ paddingVertical: 8, borderRadius: 10 }} />
+                onChangeText={(t: string) => onChange(filled.map((x, j) => (j === i ? t : x)))} style={{ paddingVertical: 8 }} />
             </View>
           </View>
         ))}
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
         <View style={{ flex: 1, minWidth: 140 }}>
-          <Field accessibilityLabel="Nom du groupe" value={groupName} onChangeText={setGroupName} maxLength={MAX_GROUP_NAME} placeholder="Nom du groupe (ex. Famille)" style={{ paddingVertical: 8, borderRadius: 10 }} />
+          <Field accessibilityLabel="Nom du groupe" value={groupName} onChangeText={setGroupName} maxLength={MAX_GROUP_NAME} placeholder="Nom du groupe (ex. Famille)" style={{ paddingVertical: 8 }} />
         </View>
         <Button small variant="ghost" label="Enregistrer les noms" onPress={save} />
         {current ? <Button small variant="ghost" label="Supprimer le groupe" onPress={() => deleteGroup(current.id)} /> : null}

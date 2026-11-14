@@ -4,11 +4,13 @@ import {
   describeCard, plural, ROLE_NAMES, baseRoleKey, specialLabelsDetailed, type Player,
 } from '@/domain';
 import { buzz } from '@/services/feedback';
+import { cardIcon } from '@/features/roleMeta';
 import { useSettings } from '@/state/settings';
 import { alive, playerOf, type GameState, type GameAction } from '@/state/gameReducer';
 import { useTheme } from '@/theme/ThemeProvider';
 import { fonts, radius } from '@/theme/tokens';
 import { ModalSheet } from '../ui/ModalSheet';
+import { RoleTile } from '../ui/RoleTile';
 import { AppText, Button, Field, Segmented } from '../ui/primitives';
 
 type D = React.Dispatch<GameAction>;
@@ -50,14 +52,15 @@ export function SecretCardModal({ state, dispatch }: P): React.JSX.Element {
           <AppText size={11} style={{ color: colors.inkSoft, letterSpacing: 1.1 }} center>{card.owner}</AppText>
           {visible ? (
             <>
-              {card.roleLine ? <AppText bold size={14.4} center style={{ color: colors.redDeep }}>{card.roleLine}</AppText> : null}
+              {card.roleLine && player ? <View style={{ transform: [{ rotate: '-1.5deg' }], marginBottom: 4 }}><RoleTile icon={cardIcon(player)} active size={168} /></View> : null}
+              {card.roleLine ? <AppText bold size={14.4} center style={{ color: colors.blood }}>{card.roleLine}</AppText> : null}
               <View style={{ alignItems: 'center', gap: 4, marginVertical: 6 }}>
                 <AppText size={10.4} style={{ color: colors.inkSoft, letterSpacing: 1.6 }} center>Ton mot</AppText>
                 <Text style={{ color: colors.ink, fontFamily: fonts.bold, fontSize: card.isJanus ? 22 : 34, textAlign: 'center', lineHeight: card.isJanus ? 30 : 42 }}>{card.wordText}</Text>
               </View>
               {card.badges.map((b) => (
-                <View key={b.label} style={{ alignSelf: 'stretch', backgroundColor: 'rgba(164,55,42,0.08)', borderWidth: 1, borderColor: 'rgba(164,55,42,0.3)', borderRadius: radius.sm, paddingVertical: 8, paddingHorizontal: 10, gap: 2 }}>
-                  <AppText bold size={12.8} style={{ color: colors.redDeep }}>{b.label}</AppText>
+                <View key={b.label} style={{ alignSelf: 'stretch', backgroundColor: 'rgba(143,29,39,0.08)', borderWidth: 1, borderColor: 'rgba(143,29,39,0.4)', borderRadius: radius.sm, paddingVertical: 8, paddingHorizontal: 10, gap: 2 }}>
+                  <AppText bold size={12.8} style={{ color: colors.blood }}>{b.label}</AppText>
                   <AppText size={11.2} style={{ color: colors.inkSoft }}>{b.desc}</AppText>
                 </View>
               ))}
@@ -70,7 +73,7 @@ export function SecretCardModal({ state, dispatch }: P): React.JSX.Element {
           <Text style={{ color: colors.inkSoft, fontFamily: fonts.italic, fontSize: 11.2, textAlign: 'center' }}>{hint}</Text>
           {settings.privacy === 'hold' ? (
             <Pressable onPressIn={() => setHeld(true)} onPressOut={() => setHeld(false)} accessibilityRole="button" accessibilityLabel="Maintenir pour révéler"
-              style={{ borderWidth: 1, borderColor: colors.ink, borderStyle: 'dashed', borderRadius: radius.sm, paddingVertical: 14, paddingHorizontal: 22, alignSelf: 'stretch', alignItems: 'center' }}>
+              style={{ borderWidth: 1.5, borderColor: colors.ink, borderStyle: 'dashed', borderRadius: radius.sm, paddingVertical: 14, paddingHorizontal: 22, alignSelf: 'stretch', alignItems: 'center' }}>
               <Text style={{ color: colors.ink, fontFamily: fonts.bold, fontSize: 14 }}>Maintenir pour révéler</Text>
             </Pressable>
           ) : maskedByTimer ? (
@@ -89,7 +92,7 @@ export function ConfirmModal({ state, dispatch }: P): React.JSX.Element {
   const target = playerOf(state, state.confirmTargetId);
   return (
     <ModalSheet visible={state.modal === 'confirm' && !!target} kicker="vote" title="Confirmer le vote" center onClose={() => dispatch({ type: 'CANCEL_CONFIRM' })}>
-      <AppText title size={30} center tone="gold">{target?.name ?? ''}</AppText>
+      <AppText title size={30} center tone="accent">{target?.name ?? ''}</AppText>
       <AppText tone="muted" size={13} center>Le groupe est d'accord pour éliminer ce joueur ?</AppText>
       <ActionsRow>
         <Button variant="ghost" label="Annuler" onPress={() => dispatch({ type: 'CANCEL_CONFIRM' })} />
@@ -105,7 +108,7 @@ export function AnnounceModal({ state, dispatch }: P): React.JSX.Element {
   const a = state.announce;
   return (
     <ModalSheet visible={state.modal === 'announce' && !!a} kicker="élimination" title={a?.headline} center>
-      {a?.lines.map((l, i) => <AppText key={i} tone={i === 0 ? 'default' : 'gold'} size={14} center>{l}</AppText>)}
+      {a?.lines.map((l, i) => <AppText key={i} tone={i === 0 ? 'default' : 'accent'} size={14} center>{l}</AppText>)}
       <AppText tone="muted" size={13} center>{a?.text ?? ''}</AppText>
       <Button arrow center label={a?.button ?? 'Continuer'} onPress={() => dispatch({ type: 'ANNOUNCE_CONTINUE' })} />
     </ModalSheet>
@@ -179,7 +182,7 @@ export function SummaryModal({ state, dispatch, onNextRound }: P & { onNextRound
   return (
     <ModalSheet visible={state.summaryOpen} title="Bilan de la manche" onClose={() => dispatch({ type: 'CLOSE_SUMMARY' })}>
       <AppText tone="muted" size={12.5}>À révéler une fois la discussion et le vote terminés.</AppText>
-      <AppText tone="gold" bold size={14}>{`Civils : ${state.civilWord} · Undercover : ${state.undercoverWord}`}</AppText>
+      <AppText tone="accent" bold size={14}>{`Civils : ${state.civilWord} · Undercover : ${state.undercoverWord}`}</AppText>
       <AppText tone="muted" size={12}>{`${n} ${plural(n, 'joueur', 'joueurs')} · manche ${state.round}`}</AppText>
       <View style={{ gap: 4 }}>{state.players.map((p) => <AppText key={p.id} size={13}>{recapLine(p)}</AppText>)}</View>
       <ActionsRow>

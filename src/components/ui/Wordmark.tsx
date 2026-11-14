@@ -1,14 +1,16 @@
 import React from 'react';
 import { Platform, View, useWindowDimensions } from 'react-native';
 import Svg, { Defs, FeBlend, FeFlood, FeGaussianBlur, Filter, G, Path } from 'react-native-svg';
+import { useTheme } from '@/theme/ThemeProvider';
 import { AppText } from './primitives';
+import { DashLine, Sparkle } from './ornaments';
 import { LOGO_REFLECT_1, LOGO_REFLECT_2, LOGO_VIEWBOX, LOGO_WORD_1, LOGO_WORD_2 } from './logoPaths';
 
-const RED = '#A4372A';
-
-/** Logo « Mytho Mytho » avec reflet (SVG d'origine) + sous-titre espacé. */
+/** Logo « Mytho Mytho » (rouge sang, avec reflet) + sous-titre entre deux filets en tirets. */
 export function Wordmark(): React.JSX.Element {
   const { width } = useWindowDimensions();
+  const { colors } = useTheme();
+  const RED = colors.bloodHi;
   const w = Math.max(300, Math.min(480, width * 0.7));
   const h = (w * LOGO_VIEWBOX.height) / LOGO_VIEWBOX.width;
   // Le flou du reflet utilise les filtres SVG : fiables sur le web, évités sur mobile (support natif variable).
@@ -25,7 +27,7 @@ export function Wordmark(): React.JSX.Element {
   );
   return (
     <View style={{ alignItems: 'center', marginBottom: Math.max(20, Math.min(34, width * 0.04)) }}>
-      <View accessibilityRole="header" accessibilityLabel="MythoMytho" style={{ marginTop: -w * 0.06, marginBottom: -w * 0.055 }}>
+      <View accessibilityRole="header" accessibilityLabel="MythoMytho" style={{ marginTop: -w * 0.04, marginBottom: -w * 0.055 }}>
         <Svg width={w} height={h} viewBox={`0 0 ${LOGO_VIEWBOX.width} ${LOGO_VIEWBOX.height}`} fill="none">
           <Path d={LOGO_WORD_1} fill={RED} />
           {reflect(LOGO_REFLECT_1, 'mmReflect0')}
@@ -34,7 +36,13 @@ export function Wordmark(): React.JSX.Element {
           {blur ? <Defs>{filter('mmReflect0', 63.625)}{filter('mmReflect1', 406.625)}</Defs> : null}
         </Svg>
       </View>
-      <AppText tone="gold" size={11.5} center style={{ letterSpacing: 3.7, marginTop: 8 }}>jeu de mots &amp; de déduction</AppText>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, width: Math.min(w, 440), maxWidth: '100%' }}>
+        <DashLine color={colors.line} />
+        <Sparkle size={9} color={colors.accentSoft} />
+        <AppText tone="accent" label size={10} center style={{ letterSpacing: 2, textTransform: 'uppercase', flexShrink: 0 }}>jeu de mots &amp; de déduction</AppText>
+        <Sparkle size={9} color={colors.accentSoft} />
+        <DashLine color={colors.line} />
+      </View>
     </View>
   );
 }

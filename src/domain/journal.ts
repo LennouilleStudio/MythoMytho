@@ -67,7 +67,7 @@ const WINNER_LABELS: Readonly<Record<Winner, string>> = {
   mrwhite: 'Mr. White',
 };
 
-function playerWon(p: Player, winner: Winner, winnerPlayerId: PlayerId | null): boolean {
+export function playerWon(p: Player, winner: Winner, winnerPlayerId: PlayerId | null): boolean {
   switch (winner) {
     case 'civils': return !isImpostorTeam(p);
     case 'undercover': return isImpostorTeam(p);

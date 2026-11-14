@@ -1,10 +1,11 @@
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { setKeepAwake } from '@/services/keepAwake';
 import { allViewed } from '@/state/gameReducer';
 import { useGame } from '@/state/game';
 import { useSettings } from '@/state/settings';
+import { bleed, bleedReset } from '../ui/bleed';
 import { Page, Screen } from '../ui/Screen';
 import { DiscussionTimer } from './DiscussionTimer';
 import { AnnounceModal, ConfirmModal, GuessModal, PickModal, SecretCardModal, SummaryModal } from './GameModals';
@@ -30,6 +31,15 @@ export function GameScreen(): React.JSX.Element {
   const keepAwake = state.phase === 'reveal' || timerRunning;
   useEffect(() => { void setKeepAwake(keepAwake); }, [keepAwake]);
   useEffect(() => () => { void setKeepAwake(false); }, []);
+
+  // Chaque élimination fait couler de nouvelles gouttes sur le fond ; une nouvelle manche les efface.
+  const dead = state.players.filter((p) => p.eliminated).length;
+  const prevDead = useRef(dead);
+  useEffect(() => {
+    if (dead > prevDead.current) bleed();
+    if (dead === 0) bleedReset();
+    prevDead.current = dead;
+  }, [dead]);
 
   const gameOver = state.phase === 'gameover';
   const newGame = (): void => {

@@ -10,6 +10,7 @@ import { useLibrary } from '@/state/library';
 import { useToast } from '@/state/toast';
 import { useTheme } from '@/theme/ThemeProvider';
 import { AppText, Button, Dossier, Segmented } from '../ui/primitives';
+import { DashLine, Divider } from '../ui/ornaments';
 import { Page, Screen } from '../ui/Screen';
 
 export function ScoresScreen(): React.JSX.Element {
@@ -35,7 +36,8 @@ export function ScoresScreen(): React.JSX.Element {
 
   const section = (title: string, children: React.ReactNode): React.JSX.Element => (
     <View style={{ gap: 6, marginBottom: 22 }}>
-      <AppText title size={17.6} style={{ marginBottom: 4 }}>{title}</AppText>
+      <AppText title size={18} style={{ marginBottom: 2 }}>{title}</AppText>
+      <Divider style={{ marginBottom: 6 }} />
       {children}
     </View>
   );
@@ -45,7 +47,7 @@ export function ScoresScreen(): React.JSX.Element {
     <Screen>
       <Page>
         <Dossier>
-          <AppText title size={24} style={{ marginBottom: 18 }}>Journal des scores</AppText>
+          <AppText title size={26} style={{ marginBottom: 18 }}>Journal des scores</AppText>
           {scoreLog.length === 0 ? <AppText tone="muted" size={13}>Aucune manche enregistrée pour l'instant. Jouez une partie pour alimenter le journal.</AppText> : null}
 
           {groups.length > 0 ? <View style={{ marginBottom: 22 }}><Segmented<string> options={groupOptions} value={group} onChange={setGroup} /></View> : null}
@@ -57,7 +59,7 @@ export function ScoresScreen(): React.JSX.Element {
             </AppText>
           ))) : null}
 
-          {Object.keys(stats.byRole).length > 0 ? section('Taux de victoire par role', Object.entries(stats.byRole).map(([role, v]) => (
+          {Object.keys(stats.byRole).length > 0 ? section('Taux de victoire par rôle', Object.entries(stats.byRole).map(([role, v]) => (
             <AppText key={role} size={13.5}>{`${ROLE_NAMES[role as RoleKey] ?? role} — ${percent(v.wins, v.games)} % (${v.games})`}</AppText>
           ))) : null}
 
@@ -75,7 +77,8 @@ export function ScoresScreen(): React.JSX.Element {
             </AppText>
           ))) : null}
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingTop: 18, borderTopWidth: 1, borderStyle: 'dashed', borderColor: colors.line }}>
+          <DashLine color={colors.line} style={{ flex: 0, marginBottom: 18 }} />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
             <Button variant="ghost" label="Exporter en CSV" onPress={() => exportAs('csv')} />
             <Button variant="ghost" label="Exporter en JSON" onPress={() => exportAs('json')} />
             {scoreLog.length > 0 ? (

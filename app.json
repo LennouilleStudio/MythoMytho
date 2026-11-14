@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "icon": "./assets/images/favicon-512.png",
-    "backgroundColor": "#10161a",
+    "backgroundColor": "#0e1613",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "fr.lennouille.mythomytho"
@@ -16,7 +16,7 @@
       "package": "fr.lennouille.mythomytho",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/favicon-maskable-512.png",
-        "backgroundColor": "#10161a"
+        "backgroundColor": "#0e1613"
       }
     },
     "web": {
@@ -26,7 +26,16 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0e1613",
+          "image": "./assets/images/splash.png",
+          "imageWidth": 260,
+          "resizeMode": "contain"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

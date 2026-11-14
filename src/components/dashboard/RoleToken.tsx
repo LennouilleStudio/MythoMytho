@@ -1,109 +1,75 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { TONE, type IconKey, type Tone } from '@/features/roleMeta';
+import { type IconKey } from '@/features/roleMeta';
 import { useTheme } from '@/theme/ThemeProvider';
 import { alpha } from '@/theme/color';
-import { fonts } from '@/theme/tokens';
-import { RoleIcon } from './RoleIcon';
+import { ART, fonts } from '@/theme/tokens';
+import { RoleTile } from '../ui/RoleTile';
+import { Stitch } from '../ui/ornaments';
 
-export const DISC = 72;
-/** Largeur de cellule commune à tous les jetons : la grille affiche au plus 5 jetons par ligne. */
-export const CELL = 112;
-
-function toneColor(tone: Tone, c: { civil: string; red: string; gold: string }): string {
-  return tone === 'civil' ? c.civil : tone === 'impostor' ? c.red : c.gold;
-}
-
-/** Disque du rôle : teinté et cerclé quand actif, éteint sinon. */
-export function Disc({ icon, active }: { icon: IconKey; active: boolean }): React.JSX.Element {
-  const { colors } = useTheme();
-  const tone = toneColor(TONE[icon], colors);
-  return (
-    <View style={{
-      width: DISC, height: DISC, borderRadius: DISC / 2, alignItems: 'center', justifyContent: 'center',
-      backgroundColor: active ? alpha(tone, 0.28) : 'rgba(128,128,128,0.10)',
-      borderWidth: 2, borderColor: active ? tone : 'transparent',
-      boxShadow: active ? `0 0 22px -6px ${tone}` : 'none',
-    }}>
-      <RoleIcon name={icon} size={36} color={active ? colors.text : colors.muted} />
-    </View>
-  );
-}
-
-function Round({ label, onPress, bg, fg, glyph, size = 30, disabled }: {
-  label: string; onPress: () => void; bg: string; fg: string; glyph: string; size?: number; disabled?: boolean;
+function Round({ label, onPress, glyph, disabled, size = 28 }: {
+  label: string; onPress: () => void; glyph: string; disabled?: boolean; size?: number;
 }): React.JSX.Element {
+  const { colors } = useTheme();
   return (
-    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={label}
-      style={({ pressed }) => ({ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.35 : pressed ? 0.8 : 1, boxShadow: '0 3px 8px rgba(0,0,0,0.35)' })}>
-      <Text style={{ color: fg, fontFamily: fonts.bold, fontSize: size * 0.58, lineHeight: size * 0.7 }}>{glyph}</Text>
+    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={label} hitSlop={6}
+      style={({ pressed }) => ({ width: size, height: size, borderRadius: size / 2, borderWidth: 1.5, borderColor: colors.lineStrong, backgroundColor: pressed ? alpha(colors.accent, 0.18) : colors.panel, alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.35 : 1 })}>
+      <Text style={{ color: colors.accent, fontFamily: fonts.bold, fontSize: size * 0.62, lineHeight: size * 0.74 }}>{glyph}</Text>
     </Pressable>
   );
 }
 
+/** Pastille « ? » parchemin, posée sur l'angle de la carte. */
 function InfoBadge({ label, onPress }: { label: string; onPress: () => void }): React.JSX.Element {
   const { colors } = useTheme();
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Aide : ${label}`} hitSlop={8}
-      style={{ position: 'absolute', top: 0, right: 8, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
-      <Text style={{ color: colors.ink, fontFamily: fonts.bold, fontSize: 12.5 }}>?</Text>
+      style={{ position: 'absolute', top: -8, left: -8, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.paper, borderWidth: 1.5, borderColor: ART.green, alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+      <Text style={{ color: colors.ink, fontFamily: fonts.bold, fontSize: 13, lineHeight: 16 }}>?</Text>
     </Pressable>
   );
 }
 
-const Caption = ({ children, active }: { children: string; active?: boolean }): React.JSX.Element => {
-  const { colors } = useTheme();
-  return <Text numberOfLines={2} style={{ color: active === false ? colors.muted : colors.text, fontFamily: fonts.body, fontSize: 11.5, textAlign: 'center', marginTop: 6, maxWidth: CELL - 8 }}>{children}</Text>;
-};
-
-/** Rôle spécial : toucher le disque (ou le bouton) l'active ; « ? » ouvre son explication. */
-export function SpecialToken({ icon, label, short, active, onToggle, onInfo }: {
-  icon: IconKey; label: string; short: string; active: boolean; onToggle: () => void; onInfo: () => void;
+/** Rôle spécial : toucher la carte (ou le bouton dessous) l'active ; « ? » ouvre son explication. */
+export function SpecialToken({ icon, label, short, active, onToggle, onInfo, size }: {
+  icon: IconKey; label: string; short: string; active: boolean; onToggle: () => void; onInfo: () => void; size: number;
 }): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <View style={{ width: CELL, alignItems: 'center' }}>
-      <View style={{ width: DISC + 16, alignItems: 'center' }}>
+    <View style={{ width: size, gap: 8 }}>
+      <View>
         <Pressable onPress={onToggle} accessibilityRole="switch" accessibilityLabel={label} accessibilityState={{ checked: active }}>
-          <Disc icon={icon} active={active} />
+          <RoleTile icon={icon} active={active} size={size} />
         </Pressable>
         <InfoBadge label={label} onPress={onInfo} />
       </View>
-      <View style={{ marginTop: -14 }}>
-        <Round label={active ? `Retirer ${short}` : `Ajouter ${short}`} onPress={onToggle} size={30}
-          bg={active ? '#e5544a' : colors.gold} fg={active ? '#fff' : colors.ink} glyph={active ? '✕' : '+'} />
-      </View>
-      <Caption active={active}>{short}</Caption>
+      <Pressable onPress={onToggle} accessibilityRole="button" accessibilityLabel={active ? `Retirer ${short}` : `Ajouter ${short}`}
+        style={{ height: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 2, borderWidth: 1.5, borderColor: active ? colors.accent : colors.lineStrong, backgroundColor: active ? colors.blood : 'transparent' }}>
+        {active ? <Stitch size={11} color={ART.bone} width={3} /> : null}
+        <Text style={{ color: active ? ART.bone : colors.accent, fontFamily: fonts.label, fontSize: 10, letterSpacing: 1.8, textTransform: 'uppercase' }}>{active ? 'Actif' : 'Activer'}</Text>
+      </Pressable>
     </View>
   );
 }
 
-/** Rôle à effectif : − / + de part et d'autre du disque, nombre en pastille dessous. */
-export function CountToken({ icon, short, value, min, max, onChange, onInfo, fixed }: {
-  icon: IconKey; short: string; value: number; min: number; max: number; onChange?: (n: number) => void; onInfo: () => void; fixed?: boolean;
+/** Rôle à effectif : carte, puis − nombre + dessous (carte seule, sans boutons, pour les Civils déduits). */
+export function CountToken({ icon, short, value, min, max, onChange, onInfo, fixed, size }: {
+  icon: IconKey; short: string; value: number; min: number; max: number; onChange?: (n: number) => void; onInfo: () => void; fixed?: boolean; size: number;
 }): React.JSX.Element {
   const { colors } = useTheme();
-  const tone = toneColor(TONE[icon], colors);
   return (
-    <View style={{ width: CELL, alignItems: 'center' }}>
-      <View style={{ width: CELL, height: DISC, alignItems: 'center', justifyContent: 'center' }}>
-        <Disc icon={icon} active={value > 0} />
+    <View style={{ width: size, gap: 8 }}>
+      <View>
+        <RoleTile icon={icon} active={value > 0} size={size} />
         <InfoBadge label={short} onPress={onInfo} />
-        {!fixed && onChange ? (
-          <>
-            <View style={{ position: 'absolute', left: (CELL - DISC) / 2 - 14, top: DISC - 36 }}>
-              <Round label={`Retirer ${short}`} onPress={() => onChange(value - 1)} disabled={value <= min} bg={colors.gold} fg={colors.ink} glyph="−" />
-            </View>
-            <View style={{ position: 'absolute', right: (CELL - DISC) / 2 - 14, top: DISC - 36 }}>
-              <Round label={`Ajouter ${short}`} onPress={() => onChange(value + 1)} disabled={value >= max} bg={colors.gold} fg={colors.ink} glyph="+" />
-            </View>
-          </>
-        ) : null}
       </View>
-      <View accessibilityLabel={`${value} ${short}`} style={{ marginTop: -14, minWidth: 32, height: 32, paddingHorizontal: 8, borderRadius: 16, backgroundColor: tone, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.panel }}>
-        <Text accessibilityLiveRegion="polite" style={{ color: '#fff7e6', fontFamily: fonts.bold, fontSize: 15 }}>{value}</Text>
+      <View style={{ height: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        {!fixed && onChange ? <Round label={`Retirer ${short}`} onPress={() => onChange(value - 1)} disabled={value <= min} glyph="−" /> : <View style={{ width: 28 }} />}
+        <View accessibilityLabel={`${value} ${short}`} style={{ minWidth: 36, height: 28, paddingHorizontal: 8, borderRadius: 2, backgroundColor: value > 0 ? colors.blood : 'transparent', borderWidth: 1.5, borderColor: value > 0 ? colors.accent : colors.line, alignItems: 'center', justifyContent: 'center' }}>
+          <Text accessibilityLiveRegion="polite" style={{ color: value > 0 ? ART.bone : colors.muted, fontFamily: fonts.bold, fontSize: 15, lineHeight: 18 }}>{value}</Text>
+        </View>
+        {!fixed && onChange ? <Round label={`Ajouter ${short}`} onPress={() => onChange(value + 1)} disabled={value >= max} glyph="+" /> : <View style={{ width: 28 }} />}
       </View>
-      <Caption>{short}</Caption>
     </View>
   );
 }
