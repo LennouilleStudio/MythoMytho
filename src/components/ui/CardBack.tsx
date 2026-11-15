@@ -72,13 +72,13 @@ export function CardBackSquare({ size, tint = ART.violet, mark = 0 }: { size: nu
   );
 }
 
-/** Dos de carte (300 × 400) : œil, double cadre, hachures, craquelure, gouttes ; teinte et emblème propres à chaque joueur. */
-export function CardBackArt({ width, closed, tint = ART.violet, mark }: { width: number; closed?: boolean; tint?: string; mark?: number }): React.JSX.Element {
+/** Contenu d'un dos de carte dans un repère de 300 × 400 (sans balise `Svg`) : réutilisable dans une scène, par exemple la carte déchirée. */
+export function CardBackBody({ closed, tint = ART.violet, mark }: { closed?: boolean; tint?: string; mark?: number }): React.JSX.Element {
   const id = safeId(useId());
   const vg = `${id}v`;
   const C = ART.cream; const B = ART.blood; const V = tint;
   return (
-    <Svg width={width} height={(width * 4) / 3} viewBox="0 0 300 400">
+    <>
       <Defs>
         <Pattern id={id} patternUnits="userSpaceOnUse" width={7} height={7} patternTransform="rotate(45)">
           <Line x1={0} y1={0} x2={0} y2={7} stroke={C} strokeWidth={1.1} opacity={0.5} />
@@ -106,6 +106,15 @@ export function CardBackArt({ width, closed, tint = ART.violet, mark }: { width:
       <Rect x={92} y={9} width={116} height={42} fill={V} stroke={C} strokeWidth={2.2} rx={2} />
       <Rect x={32} y={334} width={236} height={48} fill={V} stroke={C} strokeWidth={2.2} rx={2} />
       <Rect width={300} height={400} rx={6} fill={`url(#${vg})`} />
+    </>
+  );
+}
+
+/** Dos de carte (300 × 400) : œil, double cadre, hachures, craquelure, gouttes ; teinte et emblème propres à chaque joueur. */
+export function CardBackArt({ width, closed, tint = ART.violet, mark }: { width: number; closed?: boolean; tint?: string; mark?: number }): React.JSX.Element {
+  return (
+    <Svg width={width} height={(width * 4) / 3} viewBox="0 0 300 400">
+      <CardBackBody closed={closed} tint={tint} mark={mark} />
     </Svg>
   );
 }

@@ -6,6 +6,7 @@ import { allViewed } from '@/state/gameReducer';
 import { useGame } from '@/state/game';
 import { useSettings } from '@/state/settings';
 import { setAmbience } from '../ui/ambience';
+import { BloodRain } from '../ui/BloodRain';
 import { bleed, bleedReset } from '../ui/bleed';
 import { Page, Screen } from '../ui/Screen';
 import { DiscussionTimer } from './DiscussionTimer';
@@ -79,6 +80,7 @@ export function GameScreen(): React.JSX.Element {
       <PickModal state={state} dispatch={dispatch} />
       <GuessModal state={state} dispatch={dispatch} />
       <SummaryModal state={state} dispatch={dispatch} onNextRound={() => { nextRound(); }} />
+      <BloodRain active={state.phase === 'gameover' && (state.winner === 'undercover' || state.winner === 'mrwhite')} />
     </Screen>
   );
 }

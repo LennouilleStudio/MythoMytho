@@ -9,6 +9,7 @@ import { canPickFile, exportText, pickTextFile, shareLink, webLocation } from '@
 import { useLibrary } from '@/state/library';
 import { useToast } from '@/state/toast';
 import { AppText, Button, Dossier, Field, Panel, Segmented } from '../ui/primitives';
+import { TornCardScene } from '../ui/Scenes';
 import { Page, Screen } from '../ui/Screen';
 
 const MESSAGES = { invalid: 'Paire invalide : deux mots différents de 40 caractères maximum.', duplicate: 'Cette paire existe déjà.', full: `Limite de ${MAX_CUSTOM_PAIRS} paires atteinte.` } as const;
@@ -22,10 +23,13 @@ export function CustomPairsScreen(): React.JSX.Element {
   const [b, setB] = useState('');
   const [diff, setDiff] = useState<Difficulty>(2);
   const [pasted, setPasted] = useState('');
+  // Import impossible : message sous forme de petite scène (carte déchirée) plutôt qu'un simple toast.
+  const [importError, setImportError] = useState<string | null>(null);
 
   const merge = (incoming: readonly unknown[]): void => {
     const r = mergeCustomPairs(customPairs, incoming);
     setCustomPairs(r.pairs);
+    setImportError(null);
     toast(`${r.added} paire(s) ajoutée(s), ${r.ignored} ignorée(s).`);
   };
 
@@ -36,7 +40,7 @@ export function CustomPairsScreen(): React.JSX.Element {
     const code = importCode ?? (hash.startsWith('#paires=') ? hash.slice(8) : '');
     if (!code) return;
     const pairs = decodeShared(code);
-    if (pairs) merge(pairs); else toast('Lien de partage invalide.');
+    if (pairs) merge(pairs); else setImportError('Ce lien de partage est invalide ou incomplet.');
     router.setParams({ import: undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, importCode]);
@@ -48,7 +52,7 @@ export function CustomPairsScreen(): React.JSX.Element {
   };
   const importPasted = (): void => {
     const data = parsePairsImport(pasted);
-    if (!data) return void toast('Fichier ou texte non reconnu.');
+    if (!data) return void setImportError('Ce texte n\'est pas un export JSON de « Mes paires ».');
     merge(data); setPasted('');
   };
 
@@ -76,6 +80,15 @@ export function CustomPairsScreen(): React.JSX.Element {
             </Panel>
           ) : null}
 
+          {importError ? (
+            <Panel style={{ alignItems: 'center', gap: 10, marginBottom: 18 }}>
+              <TornCardScene width={150} />
+              <AppText bold size={14} center>Import impossible</AppText>
+              <AppText tone="muted" size={12.5} center>{importError}</AppText>
+              <Button small variant="ghost" label="Compris" onPress={() => setImportError(null)} />
+            </Panel>
+          ) : null}
+
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
             <Button variant="ghost" label="Exporter" onPress={() => void exportText('mythomytho-paires.json', 'application/json', buildPairsExport(customPairs))} disabled={customPairs.length === 0} />
             <Button variant="ghost" label="Copier un lien de partage" disabled={customPairs.length === 0}
@@ -83,7 +96,7 @@ export function CustomPairsScreen(): React.JSX.Element {
             {canPickFile ? (
               <Button variant="ghost" label="Importer un fichier" onPress={() => { void pickTextFile('.json,application/json').then((t) => {
                 const data = t ? parsePairsImport(t) : null;
-                if (data) merge(data); else if (t !== null) toast('Fichier non reconnu.');
+                if (data) merge(data); else if (t !== null) setImportError('Ce fichier n\'est pas un export JSON de « Mes paires ».');
               }); }} />
             ) : null}
           </View>

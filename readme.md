@@ -54,6 +54,15 @@ espacées, gouttes de sang effilées et craquelures rouges. Palette stricte dans
 * **Logo** : une goutte tombe de temps en temps dans le reflet, reflet plus net.
 * **Sons et vibrations** : froissement au retournement, choc sourd du tampon (`assets/sounds/`, `useFeedback`), réglable dans « Minuteur et confidentialité »
   (`settings.effects`, activé par défaut). Toutes les animations respectent « réduire les animations ».
+* **Distribution** : au début de la manche, les cartes partent du centre de la rangée et glissent à leur place une à une, avec un froissement (`DealIn`).
+* **Brillance** : une bande de lumière suit le doigt (ou le pointeur) sur les cartes de rôles et balaie la carte révélée (`ui/Sheen.tsx`).
+  L'inclinaison du téléphone n'est pas gérée : elle demanderait `expo-sensors` (`npx expo install expo-sensors`).
+* **Fin de manche** : vainqueurs hissés dans un halo crème, perdants affaissés, voilés et barrés ; pluie de gouttes sur tout l'écran quand
+  les imposteurs gagnent (`ui/BloodRain.tsx`).
+* **Résumé partageable** (`features/summary.ts`, `services/shareImage.ts`) : sur le web, image PNG (feuille de partage du navigateur ou téléchargement) ;
+  sur mobile, résumé en texte. Une vraie image sur mobile demanderait `react-native-view-shot` (`npx expo install react-native-view-shot`).
+* **Thèmes de mots** : un emblème et une teinte par thème (`ui/ThemeBadge.tsx`) ; **états vides et erreurs** illustrés (`ui/Scenes.tsx`) :
+  journal vide, page 404, import de « Mes paires » invalide.
 * Icônes d'application et favicons PNG régénérés à partir de la carte « Le Mytho ».
 
 ## Premier lancement : à regarder en priorité

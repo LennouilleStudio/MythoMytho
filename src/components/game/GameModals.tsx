@@ -57,7 +57,7 @@ export function SecretCardModal({ state, dispatch }: P): React.JSX.Element {
           <AppText size={11} style={{ color: colors.inkSoft, letterSpacing: 1.1 }} center>{card.owner}</AppText>
           {visible ? (
             <>
-              {card.roleLine && player ? <View style={{ transform: [{ rotate: '-1.5deg' }], marginBottom: 4 }}><RoleTile icon={cardIcon(player)} active size={168} /></View> : null}
+              {card.roleLine && player ? <View style={{ transform: [{ rotate: '-1.5deg' }], marginBottom: 4 }}><RoleTile icon={cardIcon(player)} active size={168} shineAuto shineDelay={650} /></View> : null}
               {card.roleLine ? <AppText bold size={14.4} center style={{ color: colors.blood }}>{card.roleLine}</AppText> : null}
               <View style={{ alignItems: 'center', gap: 4, marginVertical: 6 }}>
                 <AppText size={10.4} style={{ color: colors.inkSoft, letterSpacing: 1.6 }} center>Ton mot</AppText>

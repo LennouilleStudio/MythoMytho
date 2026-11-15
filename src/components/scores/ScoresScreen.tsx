@@ -12,6 +12,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { AppText, Button, Dossier, Segmented } from '../ui/primitives';
 import { BarRow } from '../ui/Bars';
 import { DashLine, Divider } from '../ui/ornaments';
+import { LoneCardScene } from '../ui/Scenes';
 import { Podium } from './Podium';
 import { Page, Screen } from '../ui/Screen';
 
@@ -50,7 +51,12 @@ export function ScoresScreen(): React.JSX.Element {
       <Page>
         <Dossier>
           <AppText title size={26} style={{ marginBottom: 18 }}>Journal des scores</AppText>
-          {scoreLog.length === 0 ? <AppText tone="muted" size={13}>Aucune manche enregistrée pour l'instant. Jouez une partie pour alimenter le journal.</AppText> : null}
+          {scoreLog.length === 0 ? (
+            <View style={{ alignItems: 'center', gap: 10, paddingVertical: 14, marginBottom: 14 }}>
+              <LoneCardScene />
+              <AppText tone="muted" size={13} center>Aucune manche enregistrée pour l'instant. Jouez une partie pour alimenter le journal.</AppText>
+            </View>
+          ) : null}
 
           {groups.length > 0 ? <View style={{ marginBottom: 22 }}><Segmented<string> options={groupOptions} value={group} onChange={setGroup} /></View> : null}
 

@@ -32,7 +32,7 @@ export function RevealFlip({ player, index, size, delay = 450 }: { player: Playe
     <View style={{ width: size, height: size }}>
       <Animated.View style={{ width: size, height: size, transform: [{ translateY: lift }, { scale: grow }] }}>
         <Animated.View style={{ ...face, transform: [{ perspective: 1000 }, { rotateY: rotBack }] }}><CardBackSquare size={size} tint={back.tint} mark={back.mark} /></Animated.View>
-        <Animated.View style={{ ...face, transform: [{ perspective: 1000 }, { rotateY: rotFront }] }}><RoleTile icon={cardIcon(player, true)} active size={size} /></Animated.View>
+        <Animated.View style={{ ...face, transform: [{ perspective: 1000 }, { rotateY: rotFront }] }}><RoleTile icon={cardIcon(player, true)} active size={size} shineAuto shineDelay={delay + 800} /></Animated.View>
       </Animated.View>
     </View>
   );
