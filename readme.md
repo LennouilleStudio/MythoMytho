@@ -44,6 +44,16 @@ espacées, gouttes de sang effilées et craquelures rouges. Palette stricte dans
 * **Fin de manche** : toutes les cartes sont révélées, les perdants barrés d'une croix rouge ; les gouttes se multiplient si les imposteurs gagnent.
 * **Comment jouer** : six étapes illustrées (`setup/HowToPlay.tsx`). **Accueil** : `Splash.tsx` (carte « Le Mytho » + gouttes) et image native `assets/images/splash.png`.
 * **Libellés** : capitales géométriques grasses Outfit (`assets/fonts/Outfit-Bold.ttf`, licence OFL fournie), via `fonts.label`.
+* **Annonce d'élimination** : la carte du joueur éliminé arrive face cachée puis se retourne en grand sur son rôle illustré (`game/RevealFlip.tsx`).
+  Chaque face porte sa propre rotation 3D : `backfaceVisibility` ne dépend ainsi pas de `preserve-3d`, absent du web.
+* **Dos de carte par joueur** : teinte (violet, vert, bordeaux) et petit emblème gravé selon la place à la table (`CardBack.tsx`, `backStyle`).
+* **Minuteur** : fiole de sang qui se remplit (`BloodGauge.tsx`), qui pulse sur les 10 dernières secondes.
+* **Fond par phase** (`ambience.ts`) : halo vert à la distribution, violet à la discussion, bordeaux au vote, avec lueur de bougie qui respire.
+* **Carte secrète** : grandit depuis la carte touchée (`cardOrigin.ts`), parchemin vieilli (plis, taches, bord effiloché ; version légère en thème parchemin).
+* **Accueil et scores** : éventail de cartes de rôles, podium en piles de cartes, barres de statistiques hachurées (`Podium.tsx`, `Bars.tsx`).
+* **Logo** : une goutte tombe de temps en temps dans le reflet, reflet plus net.
+* **Sons et vibrations** : froissement au retournement, choc sourd du tampon (`assets/sounds/`, `useFeedback`), réglable dans « Minuteur et confidentialité »
+  (`settings.effects`, activé par défaut). Toutes les animations respectent « réduire les animations ».
 * Icônes d'application et favicons PNG régénérés à partir de la carte « Le Mytho ».
 
 ## Premier lancement : à regarder en priorité

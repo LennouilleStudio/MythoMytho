@@ -272,7 +272,7 @@ eq(resolve(base(6), 3).res.winner, null, 'éliminer un Civil parmi 6 → la part
 {
   const settings = {
     playerCount: 4, undercoverCount: 1, mrWhiteCount: 1, espionCount: 0, autoUndercover: true, roles: roles(['idiot']),
-    selectedThemes: {}, difficulty: 0, difficultyLevel: 2, privacy: 'standard', autoHideSec: 8, showRole: true,
+    selectedThemes: {}, difficulty: 0, difficultyLevel: 2, privacy: 'standard', autoHideSec: 8, showRole: true, effects: true,
     timerEnabled: false, timerDurationMin: 3, timerSound: true,
   } as GameSettings;
   ok(checkBalance(settings, names(4)).some((i) => i.text.startsWith('À 4 joueurs ou moins')), 'équilibrage : avertissement à 4 joueurs');

@@ -37,6 +37,8 @@ export function ComfortCard({ settings: s }: { settings: GameSettings }): React.
       <Toggle label="Afficher « Tu es [rôle] » sur la carte"
         desc="Désactivé, Civils et Undercover ne voient que leur mot, comme au jeu classique. Mr. White et l'Espion voient toujours leur rôle."
         value={s.showRole} onChange={(v) => a.patch({ showRole: v })} />
+      <Toggle label="Sons et vibrations des cartes" desc="Froissement au retournement, choc sourd du tampon d'élimination, vibrations assorties."
+        value={s.effects} onChange={(v) => a.patch({ effects: v })} />
     </DashCard>
   );
 }

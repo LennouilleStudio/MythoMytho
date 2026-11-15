@@ -10,7 +10,9 @@ import { useLibrary } from '@/state/library';
 import { useToast } from '@/state/toast';
 import { useTheme } from '@/theme/ThemeProvider';
 import { AppText, Button, Dossier, Segmented } from '../ui/primitives';
+import { BarRow } from '../ui/Bars';
 import { DashLine, Divider } from '../ui/ornaments';
+import { Podium } from './Podium';
 import { Page, Screen } from '../ui/Screen';
 
 export function ScoresScreen(): React.JSX.Element {
@@ -52,23 +54,27 @@ export function ScoresScreen(): React.JSX.Element {
 
           {groups.length > 0 ? <View style={{ marginBottom: 22 }}><Segmented<string> options={groupOptions} value={group} onChange={setGroup} /></View> : null}
 
-          {board.length > 0 ? section('Classement des joueurs', board.map((r, i) => (
-            <AppText key={r.name} size={13.5}>
-              {`${i + 1}. ${r.name} — ${r.wins} victoire${r.wins > 1 ? 's' : ''}`}
-              {r.stat ? ` · ${percent(r.stat.wins, r.stat.games)} % sur ${r.stat.games} ${plural(r.stat.games, 'manche', 'manches')} · série max ${r.stat.best}` : ''}
-            </AppText>
-          ))) : null}
+          {board.length > 0 ? section('Classement des joueurs', (
+            <>
+              <Podium rows={board.slice(0, 3)} />
+              {board.slice(3).map((r, i) => (
+                <BarRow key={r.name} label={`${i + 4}. ${r.name}`} value={r.wins} max={board[0]?.wins ?? 1}
+                  display={`${r.wins} ${plural(r.wins, 'victoire', 'victoires')}${r.stat ? ` · ${percent(r.stat.wins, r.stat.games)} %` : ''}`} />
+              ))}
+            </>
+          )) : null}
 
           {Object.keys(stats.byRole).length > 0 ? section('Taux de victoire par rôle', Object.entries(stats.byRole).map(([role, v]) => (
-            <AppText key={role} size={13.5}>{`${ROLE_NAMES[role as RoleKey] ?? role} — ${percent(v.wins, v.games)} % (${v.games})`}</AppText>
+            <BarRow key={role} label={ROLE_NAMES[role as RoleKey] ?? role} value={percent(v.wins, v.games)} display={`${percent(v.wins, v.games)} % · ${v.games}`}
+              tone={role === 'civil' ? 'accent' : 'blood'} />
           ))) : null}
 
           {Object.keys(stats.lies).length > 0 ? section('Mensonges du Mytho', Object.entries(stats.lies).map(([name, v]) => (
-            <AppText key={name} size={13.5}>{`${name} — ${percent(v.passed, v.games)} % passés inaperçus (${v.passed}/${v.games})`}</AppText>
+            <BarRow key={name} label={name} value={percent(v.passed, v.games)} display={`${percent(v.passed, v.games)} % passés inaperçus · ${v.passed}/${v.games}`} tone="blood" />
           ))) : null}
 
           {Object.keys(stats.missions).length > 0 ? section("Missions d'Hercule", Object.entries(stats.missions).map(([name, v]) => (
-            <AppText key={name} size={13.5}>{`${name} — ${percent(v.success, v.games)} % accomplies (${v.success}/${v.games})`}</AppText>
+            <BarRow key={name} label={name} value={percent(v.success, v.games)} display={`${percent(v.success, v.games)} % accomplies · ${v.success}/${v.games}`} />
           ))) : null}
 
           {entries.length > 0 ? section('Historique des manches', entries.slice(0, 50).map((e) => (

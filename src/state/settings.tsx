@@ -11,7 +11,7 @@ const NO_ROLES = Object.fromEntries(SPECIAL_KEYS.map((k) => [k, false])) as unkn
 export const defaultSettings: GameSettings = {
   playerCount: 6, undercoverCount: 1, mrWhiteCount: 0, espionCount: 0, autoUndercover: true,
   roles: NO_ROLES, selectedThemes: { classique: true }, difficulty: 0, difficultyLevel: 2,
-  privacy: 'standard', autoHideSec: 8, showRole: true, timerEnabled: false, timerDurationMin: 3, timerSound: true,
+  privacy: 'standard', autoHideSec: 8, showRole: true, timerEnabled: false, timerDurationMin: 3, timerSound: true, effects: true,
 };
 
 const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -47,6 +47,7 @@ export function sanitizeSettings(raw: unknown, timerRaw?: unknown): GameSettings
     timerEnabled: bool(t.enabled ?? o.timerEnabled, false),
     timerDurationMin: clamp(Math.round(num(t.durationMin ?? t.duration ?? o.timerDurationMin, 3)), TIMER_MIN_MINUTES, TIMER_MAX_MINUTES),
     timerSound: bool(t.sound ?? o.timerSound, true),
+    effects: bool(o.effects, true),
   };
 }
 

@@ -5,6 +5,7 @@ import { setKeepAwake } from '@/services/keepAwake';
 import { allViewed } from '@/state/gameReducer';
 import { useGame } from '@/state/game';
 import { useSettings } from '@/state/settings';
+import { setAmbience } from '../ui/ambience';
 import { bleed, bleedReset } from '../ui/bleed';
 import { Page, Screen } from '../ui/Screen';
 import { DiscussionTimer } from './DiscussionTimer';
@@ -40,6 +41,13 @@ export function GameScreen(): React.JSX.Element {
     if (dead === 0) bleedReset();
     prevDead.current = dead;
   }, [dead]);
+
+  // Halo du fond : vert à la distribution, violet pendant la discussion, bordeaux au vote.
+  const discussing = state.phase === 'reveal' && allViewed(state);
+  useEffect(() => {
+    setAmbience(state.phase === 'vote' || (state.phase === 'gameover' && state.winner !== 'civils') ? 'burgundy' : discussing ? 'violet' : 'green');
+  }, [state.phase, state.winner, discussing]);
+  useEffect(() => () => setAmbience('none'), []);
 
   const gameOver = state.phase === 'gameover';
   const newGame = (): void => {

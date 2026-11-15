@@ -5,7 +5,9 @@ import { cardIcon } from '@/features/roleMeta';
 import { alive, type GameAction, type GameState } from '@/state/gameReducer';
 import { ThemeOverride, useTheme } from '@/theme/ThemeProvider';
 import { ART, fonts } from '@/theme/tokens';
-import { CardBackArt, CardFrontArt } from '../ui/CardBack';
+import { CardBackArt, CardFrontArt, backStyle } from '../ui/CardBack';
+import { rememberOrigin } from '../ui/cardOrigin';
+import { useFeedback } from '../ui/useFeedback';
 import { RoleTile } from '../ui/RoleTile';
 import { DropStamp } from '../ui/Stamp';
 import { NATIVE, useProgress, useReducedMotion } from '../ui/motion';
@@ -41,6 +43,9 @@ export function PlayerCard({ player, index, onPress, faded, struck, stampReady =
   const { colors } = useTheme();
   const reduce = useReducedMotion();
   const idle = !faded && !struck;
+  const fx = useFeedback();
+  const back = backStyle(index);
+  const ref = useRef<View>(null);
 
   // Balancement : va-et-vient lent, déphasé d'une carte à l'autre.
   const sway = useRef(new Animated.Value(0)).current;
@@ -64,42 +69,46 @@ export function PlayerCard({ player, index, onPress, faded, struck, stampReady =
   useEffect(() => { if (faded) { turn.setValue(0); setTurning(false); } }, [faded, turn]);
   const press = (): void => {
     if (!onPress || turning) return;
+    ref.current?.measureInWindow?.((x, y, w, h) => rememberOrigin({ x, y, w, h }));
     if (!flip || reduce) { onPress(); return; }
     setTurning(true);
+    fx.flip();
     Animated.timing(turn, { toValue: 1, duration: FLIP_MS, easing: Easing.inOut(Easing.cubic), useNativeDriver: NATIVE }).start(({ finished }) => { if (finished) onPress(); });
   };
-  const rotY = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+  // Chaque face porte sa propre rotation (et non le parent) : `backfaceVisibility` ne dépend alors pas de `preserve-3d`, absent du web.
+  const rotBack = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+  const rotFront = turn.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
   const lift = turn.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, -14, -4] });
   const grow = turn.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.12, 1.06] });
   const face = { position: 'absolute', top: 0, left: 0, width: CARD_W, height: (CARD_W * 4) / 3, backfaceVisibility: 'hidden', borderRadius: 6, overflow: 'hidden' } as const;
 
   return (
-    <Pressable onPress={press} disabled={!onPress || faded} accessibilityRole="button"
+    <Pressable ref={ref} onPress={press} disabled={!onPress || faded} accessibilityRole="button"
       accessibilityLabel={caption ? `${player.name} — ${caption}` : player.name} accessibilityState={{ disabled: !onPress || !!faded }}>
       {({ pressed }) => (
         <Animated.View style={{ width: CARD_W, height: (CARD_W * 4) / 3, borderRadius: 6, boxShadow: pressed ? '0 18px 28px -12px rgba(0,0,0,0.75)' : `0 12px 24px -12px ${colors.shadow}`, transform: [{ rotate: pressed ? '0deg' : swayRot }, { translateY: pressed ? -4 : swayY }] }}>
-          <Animated.View style={{ width: CARD_W, height: (CARD_W * 4) / 3, opacity: faded || struck ? 0.55 : 1, transform: [{ perspective: 900 }, { translateY: lift }, { scale: grow }, { rotateY: rotY }] }}>
-            <View style={face}>
-              <CardBackArt width={CARD_W} closed={faded || struck} />
+          <Animated.View style={{ width: CARD_W, height: (CARD_W * 4) / 3, opacity: faded || struck ? 0.55 : 1, transform: [{ translateY: lift }, { scale: grow }] }}>
+            <Animated.View style={{ ...face, transform: [{ perspective: 900 }, { rotateY: rotBack }] }}>
+              <CardBackArt width={CARD_W} closed={faded || struck} tint={back.tint} mark={back.mark} />
               <View pointerEvents="none" style={{ position: 'absolute', top: 9 * S, left: 92 * S, width: 116 * S, height: 42 * S, alignItems: 'center', justifyContent: 'center' }}>
                 <Text style={{ color: ART.cream, fontFamily: fonts.label, fontSize: 11, letterSpacing: 1.6 }}>{`#${index + 1}`}</Text>
               </View>
               <View pointerEvents="none" style={{ position: 'absolute', top: 334 * S, left: 32 * S, width: 236 * S, height: 48 * S, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
                 <Text numberOfLines={1} style={{ color: ART.cream, fontFamily: fonts.label, fontSize: 10, letterSpacing: 1.3, textTransform: 'uppercase', textAlign: 'center', textDecorationLine: struck ? 'line-through' : 'none' }}>{player.name}</Text>
               </View>
-            </View>
+            </Animated.View>
             {flip ? (
-              <View style={{ ...face, transform: [{ rotateY: '180deg' }] }}>
+              <Animated.View style={{ ...face, transform: [{ perspective: 900 }, { rotateY: rotFront }] }}>
                 <CardFrontArt width={CARD_W} />
                 <View pointerEvents="none" style={{ position: 'absolute', top: 334 * S, left: 32 * S, width: 236 * S, height: 48 * S, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
                   <Text numberOfLines={1} style={{ color: ART.green, fontFamily: fonts.label, fontSize: 10, letterSpacing: 1.3, textTransform: 'uppercase' }}>{player.name}</Text>
                 </View>
-              </View>
+              </Animated.View>
             ) : null}
           </Animated.View>
           {struck ? (
             <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-              <DropStamp label="Éliminé" active={!!stampReady} size={13} />
+              <DropStamp label="Éliminé" active={!!stampReady} size={13} onImpact={fx.stamp} />
             </View>
           ) : null}
         </Animated.View>

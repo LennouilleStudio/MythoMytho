@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Animated, Text, View } from 'react-native';
 import { ART, fonts } from '@/theme/tokens';
 import { useProgress } from './motion';
@@ -18,10 +18,16 @@ export function StampBadge({ label, size = 14, rotate = -14 }: { label: string; 
  * Tampon qui s'abat : arrive grossi et transparent, se plaque avec un petit rebond. `active` le déclenche
  * (mouvement réduit : posé directement).
  */
-export function DropStamp({ label, active, size = 14, rotate = -14, delay = 0 }: {
-  label: string; active: boolean; size?: number; rotate?: number; delay?: number;
+export function DropStamp({ label, active, size = 14, rotate = -14, delay = 0, onImpact }: {
+  label: string; active: boolean; size?: number; rotate?: number; delay?: number; /** Appelé au moment où le tampon touche la carte (son et vibration). */ onImpact?: () => void;
 }): React.JSX.Element {
   const p = useProgress(active, { duration: 330, delay });
+  useEffect(() => {
+    if (!active || !onImpact) return;
+    const t = setTimeout(onImpact, delay + 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, delay]);
   const scale = p.interpolate({ inputRange: [0, 0.75, 1], outputRange: [2.6, 0.94, 1] });
   return (
     <Animated.View pointerEvents="none" style={{ opacity: p.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 0.9, 1] }), transform: [{ scale }] }}>

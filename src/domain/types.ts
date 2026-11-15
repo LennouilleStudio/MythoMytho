@@ -115,6 +115,8 @@ export interface GameSettings {
   readonly timerEnabled: boolean;
   readonly timerDurationMin: number;
   readonly timerSound: boolean;
+  /** Sons et vibrations des cartes (retournement, tampon d'élimination). */
+  readonly effects: boolean;
 }
 
 /* ------------------------------ Manche ------------------------------ */

@@ -19,6 +19,8 @@ export interface Announcement {
   readonly lines: readonly string[];
   readonly text: string;
   readonly button: string;
+  /** Joueurs éliminés par cet événement : leurs cartes sont retournées en grand dans l'annonce. */
+  readonly victimIds: readonly PlayerId[];
 }
 
 export type GuessView =
@@ -139,7 +141,7 @@ function applyResolution(
       winner: null, winnerDetail: '', winnerReason: null, guessQueue: [],
       pendingOrionId: r.orionPending.id, pendingPrometheusId: null,
       announce: {
-        headline, lines,
+        headline, lines, victimIds: victims.map((v) => v.id),
         text: `Orion (${r.orionPending.name}) emporte un joueur avec lui/elle : désignez sa cible.`,
         button: 'Désigner la cible',
       },
@@ -152,7 +154,7 @@ function applyResolution(
     guessQueue: r.guessQueue.map((p) => p.id),
     pendingOrionId: null,
     pendingPrometheusId: r.prometheusPending?.id ?? null,
-    announce: { headline, lines, text, button },
+    announce: { headline, lines, text, button, victimIds: victims.map((v) => v.id) },
   };
 }
 
@@ -239,7 +241,7 @@ export function gameReducer(s: GameState, a: GameAction): GameState {
           players, modal: 'announce', pickPurpose: null, pendingPrometheusId: null,
           announce: {
             headline: `Prométhée éclaire le groupe : ${target.name} est ${isImpostorTeam(target) ? 'un imposteur' : 'un Civil'} !`,
-            lines: [],
+            lines: [], victimIds: [],
             text: hasGuess
               ? `${s.guessQueue.length > 1 ? 'Les Mr. White ont' : 'Mr. White a'} une dernière chance : deviner le mot des Civils.`
               : 'La partie continue — au prochain vote.',

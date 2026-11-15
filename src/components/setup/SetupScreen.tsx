@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { View, useWindowDimensions } from 'react-native';
+import { RoleFan } from '../ui/RoleFan';
 import { HowToPlay } from './HowToPlay';
 import { promptInstall, watchInstallable } from '@/services/pwa';
 import { useGame } from '@/state/game';
@@ -55,6 +56,7 @@ export function SetupScreen(): React.JSX.Element {
   return (
     <Screen>
       <Page maxWidth={1120}>
+        <RoleFan />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
           <AppText title size={24}>Nouvelle manche</AppText>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18 }}>

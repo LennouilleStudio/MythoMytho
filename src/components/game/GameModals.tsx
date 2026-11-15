@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import {
   describeCard, plural, ROLE_NAMES, baseRoleKey, specialLabelsDetailed, type Player,
@@ -9,7 +9,9 @@ import { useSettings } from '@/state/settings';
 import { alive, playerOf, type GameState, type GameAction } from '@/state/gameReducer';
 import { useTheme } from '@/theme/ThemeProvider';
 import { fonts, radius } from '@/theme/tokens';
+import { takeOrigin } from '../ui/cardOrigin';
 import { ModalSheet } from '../ui/ModalSheet';
+import { RevealFlip } from './RevealFlip';
 import { RoleTile } from '../ui/RoleTile';
 import { AppText, Button, Field, Segmented } from '../ui/primitives';
 
@@ -27,6 +29,9 @@ export function SecretCardModal({ state, dispatch }: P): React.JSX.Element {
   const { colors } = useTheme();
   const player = playerOf(state, state.openCardId);
   const open = state.modal === 'card' && !!player;
+  // Position de la carte touchée (mémorisée par PlayerCard) : la fenêtre grandit depuis elle.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const origin = useMemo(() => (state.openCardId !== null ? takeOrigin() : null), [state.openCardId]);
   const [held, setHeld] = useState(false);
   const [maskedByTimer, setMaskedByTimer] = useState(false);
   // Standard et auto : le mot est affiché dès l'ouverture (le joueur vient de toucher sa propre carte).
@@ -46,7 +51,7 @@ export function SecretCardModal({ state, dispatch }: P): React.JSX.Element {
     : maskedByTimer ? 'Carte masquée automatiquement.' : "Assure-toi que personne d'autre ne regarde l'écran avant de continuer.";
 
   return (
-    <ModalSheet visible={open} paper stamp="confidentiel">
+    <ModalSheet visible={open} paper stamp="confidentiel" from={origin}>
       {card ? (
         <>
           <AppText size={11} style={{ color: colors.inkSoft, letterSpacing: 1.1 }} center>{card.owner}</AppText>
@@ -106,8 +111,15 @@ export function ConfirmModal({ state, dispatch }: P): React.JSX.Element {
 
 export function AnnounceModal({ state, dispatch }: P): React.JSX.Element {
   const a = state.announce;
+  const victims = (a?.victimIds ?? []).map((id) => playerOf(state, id)).filter((p): p is Player => p !== undefined);
+  const size = victims.length <= 1 ? 190 : victims.length === 2 ? 128 : 96;
   return (
     <ModalSheet visible={state.modal === 'announce' && !!a} kicker="élimination" title={a?.headline} center>
+      {victims.length > 0 ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginVertical: 4 }}>
+          {victims.map((v, i) => <RevealFlip key={v.id} player={v} index={state.players.findIndex((p) => p.id === v.id)} size={size} delay={450 + i * 350} />)}
+        </View>
+      ) : null}
       {a?.lines.map((l, i) => <AppText key={i} tone={i === 0 ? 'default' : 'accent'} size={14} center>{l}</AppText>)}
       <AppText tone="muted" size={13} center>{a?.text ?? ''}</AppText>
       <Button arrow center label={a?.button ?? 'Continuer'} onPress={() => dispatch({ type: 'ANNOUNCE_CONTINUE' })} />

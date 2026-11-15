@@ -1,6 +1,6 @@
 import React, { useId, useState } from 'react';
 import { Animated, Easing, Text, View, type LayoutChangeEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
-import Svg, { Circle, Defs, Line, Path, Pattern, Polygon, Rect } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, Path, Pattern, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useTheme } from '@/theme/ThemeProvider';
 import { fonts, radius } from '@/theme/tokens';
 import { NATIVE, useReducedMotion } from './motion';
@@ -185,16 +185,66 @@ export function Plaque({ label, bg, size = 10.5, tone = 'accent', mirrored, styl
 }
 
 /**
+ * Parchemin vivant : bord effiloché, assombrissement des angles ; en version `full`, deux plis croisés (trait sombre + reflet clair)
+ * et des taches rondes à anneau, comme du papier longtemps plié.
+ */
+function Aging({ w, h, id, seed, full }: { w: number; h: number; id: string; seed: number; full: boolean }): React.JSX.Element {
+  const m = React.useMemo(() => {
+    const rand = rng(seed * 7 + 1);
+    const pts: string[] = [];
+    const step = 11; const e = 1.6;
+    const j = (): number => (rand() - 0.5) * 2.4;
+    for (let x = 0; x <= w; x += step) pts.push(`${x.toFixed(1)},${(e + j()).toFixed(1)}`);
+    for (let y = 0; y <= h; y += step) pts.push(`${(w - e + j()).toFixed(1)},${y.toFixed(1)}`);
+    for (let x = w; x >= 0; x -= step) pts.push(`${x.toFixed(1)},${(h - e + j()).toFixed(1)}`);
+    for (let y = h; y >= 0; y -= step) pts.push(`${(e + j()).toFixed(1)},${y.toFixed(1)}`);
+    const vx = w * (0.46 + rand() * 0.1); const hy = h * (0.36 + rand() * 0.12);
+    return { edge: pts.join(' '), vx, hy, s1: { x: w * (0.7 + rand() * 0.12), y: h * (0.22 + rand() * 0.1), r: Math.min(w, h) * (0.13 + rand() * 0.04) }, s2: { x: w * (0.2 + rand() * 0.1), y: h * (0.72 + rand() * 0.1), r: Math.min(w, h) * 0.07 } };
+  }, [w, h, seed]);
+  const k = full ? 1 : 0.55;
+  return (
+    <>
+      <Defs>
+        <RadialGradient id={`${id}a`} cx={w / 2} cy={h / 2} r={Math.hypot(w, h) / 2} gradientUnits="userSpaceOnUse">
+          <Stop offset="0.6" stopColor="#5f4119" stopOpacity={0} />
+          <Stop offset="1" stopColor="#5f4119" stopOpacity={0.3 * k} />
+        </RadialGradient>
+        <RadialGradient id={`${id}s`} gradientUnits="objectBoundingBox" cx="0.5" cy="0.5" r="0.5">
+          <Stop offset="0" stopColor="#78501a" stopOpacity={0.15} />
+          <Stop offset="0.8" stopColor="#78501a" stopOpacity={0.07} />
+          <Stop offset="1" stopColor="#78501a" stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Rect x={0} y={0} width={w} height={h} fill={`url(#${id}a)`} />
+      <Polygon points={m.edge} fill="none" stroke="rgba(60,40,15,0.28)" strokeWidth={0.9} />
+      {full ? (
+        <>
+          <Path d={`M${m.vx} 3Q${m.vx + 7} ${h / 2} ${m.vx - 4} ${h - 3}`} stroke="rgba(60,40,15,0.22)" strokeWidth={1.2} fill="none" />
+          <Path d={`M${m.vx + 1.6} 3Q${m.vx + 8.6} ${h / 2} ${m.vx - 2.4} ${h - 3}`} stroke="rgba(255,250,235,0.5)" strokeWidth={1} fill="none" />
+          <Path d={`M3 ${m.hy}Q${w / 2} ${m.hy + 6} ${w - 3} ${m.hy - 3}`} stroke="rgba(60,40,15,0.2)" strokeWidth={1.2} fill="none" />
+          <Path d={`M3 ${m.hy + 1.6}Q${w / 2} ${m.hy + 7.6} ${w - 3} ${m.hy - 1.4}`} stroke="rgba(255,250,235,0.45)" strokeWidth={1} fill="none" />
+          <Circle cx={m.s1.x} cy={m.s1.y} r={m.s1.r} fill={`url(#${id}s)`} />
+          <Circle cx={m.s1.x} cy={m.s1.y} r={m.s1.r * 0.82} fill="none" stroke="rgba(120,80,25,0.16)" strokeWidth={1.2} />
+          <Circle cx={m.s2.x} cy={m.s2.y} r={m.s2.r} fill={`url(#${id}s)`} />
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/**
  * Cadre gravé : double filet, étoiles aux angles, hachures dans deux coins opposés, gouttes de sang en option.
  * Le contenu est posé par-dessus ; l'appelant fournit le rembourrage (≥ 18) pour rester à l'intérieur du filet.
  */
-export function Frame({ children, style, bg, stroke, soft, accent, hatch = true, drips = false, seed = 7, dripCount, dripMax = 44, corners = true, crack = false, grain }: {
+export function Frame({ children, style, bg, stroke, soft, accent, hatch = true, drips = false, seed = 7, dripCount, dripMax = 44, corners = true, crack = false, grain, aged }: {
   children?: React.ReactNode; style?: StyleProp<ViewStyle>; bg?: string; stroke?: string; soft?: string; accent?: string;
   hatch?: boolean; drips?: boolean; seed?: number; dripCount?: number; dripMax?: number; corners?: boolean; crack?: boolean;
   /** Grain de papier (couleur du grain) : parchemin imprimé. */ grain?: string;
+  /** Vieillissement du parchemin : `light` (bord effiloché, angles assombris) ou `full` (plis, taches). Par défaut `light` en thème parchemin. */ aged?: 'light' | 'full' | false;
 }): React.JSX.Element {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const id = safeId(useId());
+  const age = aged === undefined ? (mode === 'light' ? 'light' : false) : aged;
   const [box, setBox] = useState({ w: 0, h: 0 });
   const onLayout = (e: LayoutChangeEvent): void => {
     const { width, height } = e.nativeEvent.layout;
@@ -221,6 +271,7 @@ export function Frame({ children, style, bg, stroke, soft, accent, hatch = true,
               <Polygon points={`${w - IN},${h - IN} ${w - IN - t},${h - IN} ${w - IN},${h - IN - t}`} fill={`url(#${id})`} />
             </>
           ) : null}
+          {age ? <Aging w={w} h={h} id={id} seed={seed} full={age === 'full'} /> : null}
           <Rect x={0.75} y={0.75} width={w - 1.5} height={h - 1.5} rx={2} fill="none" stroke={outer} strokeWidth={1.5} />
           <Rect x={IN + 0.5} y={IN + 0.5} width={w - IN * 2 - 1} height={h - IN * 2 - 1} fill="none" stroke={inner} strokeWidth={1} />
           {corners ? [[IN + 9, IN + 9], [w - IN - 9, IN + 9], [IN + 9, h - IN - 9], [w - IN - 9, h - IN - 9]].map((p, i) => (
