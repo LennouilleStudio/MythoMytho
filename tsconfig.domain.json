@@ -29,6 +29,7 @@
   "include": [
     "src/domain/**/*.ts",
     "src/state/gameReducer.ts",
+    "src/net/**/*.ts",
     "src/data/*.json",
     "scripts/*.ts"
   ]

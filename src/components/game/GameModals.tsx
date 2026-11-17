@@ -117,7 +117,7 @@ export function AnnounceModal({ state, dispatch }: P): React.JSX.Element {
     <ModalSheet visible={state.modal === 'announce' && !!a} kicker="élimination" title={a?.headline} center>
       {victims.length > 0 ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginVertical: 4 }}>
-          {victims.map((v, i) => <RevealFlip key={v.id} player={v} index={state.players.findIndex((p) => p.id === v.id)} size={size} delay={450 + i * 350} />)}
+          {victims.map((v, i) => <RevealFlip key={v.id} player={{ name: v.name, icon: cardIcon(v, true) }} index={state.players.findIndex((p) => p.id === v.id)} size={size} delay={450 + i * 350} />)}
         </View>
       ) : null}
       {a?.lines.map((l, i) => <AppText key={i} tone={i === 0 ? 'default' : 'accent'} size={14} center>{l}</AppText>)}

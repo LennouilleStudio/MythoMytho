@@ -3,6 +3,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import { GameProvider } from './game';
 import { LibraryProvider } from './library';
+import { OnlineProvider } from './online';
 import { SettingsProvider } from './settings';
 import { ToastProvider } from './toast';
 
@@ -13,7 +14,7 @@ export function AppProviders({ children }: { children: React.ReactNode }): React
         <ToastProvider>
           <SettingsProvider>
             <LibraryProvider>
-              <GameProvider>{children}</GameProvider>
+              <GameProvider><OnlineProvider>{children}</OnlineProvider></GameProvider>
             </LibraryProvider>
           </SettingsProvider>
         </ToastProvider>

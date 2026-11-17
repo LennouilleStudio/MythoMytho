@@ -65,6 +65,35 @@ espacées, gouttes de sang effilées et craquelures rouges. Palette stricte dans
   journal vide, page 404, import de « Mes paires » invalide.
 * Icônes d'application et favicons PNG régénérés à partir de la carte « Le Mytho ».
 
+## Jouer en ligne (serveur autoritaire)
+
+Chaque joueur joue sur son propre appareil. Un petit serveur Node tient la partie ; les téléphones ne font qu'envoyer des intentions
+(« j'ai lu ma carte », « je vote pour 3 ») et afficher la vue que le serveur leur renvoie.
+
+```
+npm install                 # ajoute esbuild (compilation du moteur de salle)
+npm run server              # compile le moteur puis écoute sur le port 8787 (PORT=… pour changer)
+npm run test:server         # test de bout en bout : vrais clients WebSocket contre le vrai serveur
+```
+
+Dans l'application : « Jouer en ligne » (lien sous le logo). L'hôte crée une salle et communique son **code à 4 lettres** ; les autres le saisissent.
+L'adresse du serveur se règle dans « Adresse du serveur » (formulaire) ou par la variable `EXPO_PUBLIC_SERVER_URL` (ex. `ws://192.168.1.20:8787`,
+`wss://jeu.example.fr`). Sur le web, par défaut : la machine qui sert l'application, port 8787.
+
+**Ce que le serveur garantit**
+* Il exécute le même code que l'application (`src/domain`, `src/state/gameReducer.ts`, moteur `src/net/room.ts`, compilé tel quel par `server/build.mjs`).
+* Chaque joueur ne reçoit que **sa** carte (`src/net/room.ts › viewFor`). Les rôles d'un joueur ne deviennent publics qu'à son élimination ; mots et rôles de tous à la fin de manche.
+* Les droits sont vérifiés côté serveur (hôte seul pour lancer, régler, continuer ; seul le joueur concerné pour Mr. White, Orion, Prométhée ; les éliminés ne votent pas ; pas de vote pour soi).
+* Vote secret : on sait **qui** a voté, jamais **pour qui**. Égalité : second tour entre ex æquo, puis tirage au sort.
+* Reconnexion : chaque siège a un jeton ; une coupure réseau (ou la fermeture de l'application) ne fait pas perdre sa place. Si l'hôte part, le premier joueur connecté le remplace.
+* Aucune dépendance côté serveur : le WebSocket (RFC 6455) est écrit à la main dans `server/server.mjs` (remplaçable par `ws` si vous préférez).
+
+**Déployer** : n'importe quel hébergeur Node (VPS, Fly.io, Railway, Render…) derrière du TLS (`wss://`). `ALLOWED_ORIGINS=https://jeu.example.fr` limite les origines web.
+L'état des salles est en mémoire : un redémarrage du serveur ferme les parties en cours.
+
+**Limites connues** : pas de rejoindre en cours de manche (seulement se reconnecter) ; la liste de mots utilisée est celle embarquée (les « Mes paires » locales ne sont pas envoyées) ;
+la composition (rôles, thèmes, minuteur) se règle dans le salon et se fige au lancement.
+
 ## Premier lancement : à regarder en priorité
 
 1. `npm run typecheck` — la première compilation contre les vrais types React Native / Expo peut révéler des détails de typage

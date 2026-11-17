@@ -60,6 +60,7 @@ export function SetupScreen(): React.JSX.Element {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
           <AppText title size={24}>Nouvelle manche</AppText>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18 }}>
+            <LinkButton label="Jouer en ligne" onPress={() => router.push('/online')} />
             <LinkButton label="Journal des scores" onPress={() => router.push('/scores')} />
             {installable ? <LinkButton label="Installer l'app" onPress={() => { void promptInstall(); }} /> : null}
             <LinkButton label="Comment jouer" chevron open={rules} onPress={() => setRules((r) => !r)} />

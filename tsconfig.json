@@ -12,5 +12,5 @@
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  "exclude": ["node_modules", "scripts", "build-domain", "dist"]
+  "exclude": ["node_modules", "scripts", "server", "build-domain", "dist"]
 }

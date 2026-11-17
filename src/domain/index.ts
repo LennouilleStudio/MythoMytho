@@ -8,3 +8,4 @@ export * from './assign';
 export * from './elimination';
 export * from './journal';
 export * from './stats';
+export * from './settingsModel';

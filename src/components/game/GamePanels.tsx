@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useId, useRef, useState } 
 import { Animated, Easing, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { ROLE_NAMES, gameOverText, playerWon, type Player, type Winner } from '@/domain';
-import { cardIcon } from '@/features/roleMeta';
+import { cardIcon, type IconKey } from '@/features/roleMeta';
 import { buildSummarySvg, buildSummaryText } from '@/features/summary';
 import { shareSummary } from '@/services/shareImage';
 import { useToast } from '@/state/toast';
@@ -43,7 +43,7 @@ const DEAL = Easing.out(Easing.cubic);
  * - `struck` : carte éliminée, œil fermé, tampon « Éliminé » qui s'abat dès que `stampReady`.
  */
 export function PlayerCard({ player, index, onPress, faded, struck, stampReady = true, flip, caption }: {
-  player: Player; index: number; onPress?: () => void; faded?: boolean; struck?: boolean; stampReady?: boolean; flip?: boolean; caption?: string;
+  player: Pick<Player, 'name'>; index: number; onPress?: () => void; faded?: boolean; struck?: boolean; stampReady?: boolean; flip?: boolean; caption?: string;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const reduce = useReducedMotion();
@@ -71,6 +71,8 @@ export function PlayerCard({ player, index, onPress, faded, struck, stampReady =
   // Retournement : 0 → 1 = 0° → 180° ; la face parchemin apparaît à mi-course.
   const turn = useRef(new Animated.Value(0)).current;
   const [turning, setTurning] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (resetTimer.current) clearTimeout(resetTimer.current); }, []);
   useEffect(() => { if (faded) { turn.setValue(0); setTurning(false); } }, [faded, turn]);
   const press = (): void => {
     if (!onPress || turning) return;
@@ -78,7 +80,12 @@ export function PlayerCard({ player, index, onPress, faded, struck, stampReady =
     if (!flip || reduce) { onPress(); return; }
     setTurning(true);
     fx.flip();
-    Animated.timing(turn, { toValue: 1, duration: FLIP_MS, easing: Easing.inOut(Easing.cubic), useNativeDriver: NATIVE }).start(({ finished }) => { if (finished) onPress(); });
+    Animated.timing(turn, { toValue: 1, duration: FLIP_MS, easing: Easing.inOut(Easing.cubic), useNativeDriver: NATIVE }).start(({ finished }) => {
+      if (!finished) return;
+      onPress();
+      // La fenêtre qui s'ouvre recouvre la carte ; on la repose face cachée derrière (utile quand elle reste touchable, en ligne).
+      resetTimer.current = setTimeout(() => { turn.setValue(0); setTurning(false); }, 700);
+    });
   };
   // Chaque face porte sa propre rotation (et non le parent) : `backfaceVisibility` ne dépend alors pas de `preserve-3d`, absent du web.
   const rotBack = turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
@@ -275,7 +282,7 @@ export function VotePhase({ state, dispatch, actions }: { state: GameState; disp
 }
 
 /** Bannière de fin : une carte imprimée, toujours sombre ; les gouttes se multiplient quand les imposteurs l'emportent. */
-const BANNER: Readonly<Record<Winner, { bg: string; stroke: string; drips: number; dripMax: number }>> = {
+export const BANNER: Readonly<Record<Winner, { bg: string; stroke: string; drips: number; dripMax: number }>> = {
   civils: { bg: ART.green, stroke: ART.cream, drips: 0, dripMax: 44 },
   undercover: { bg: ART.burgundy, stroke: ART.blood, drips: 11, dripMax: 104 },
   idiot: { bg: ART.violet, stroke: ART.cream, drips: 0, dripMax: 44 },
@@ -317,7 +324,7 @@ function Glow({ size }: { size: number }): React.JSX.Element {
  * Carte révélée en fin de manche. Vainqueur : se hisse (un peu plus haut, un peu plus grand) dans un halo crème.
  * Perdant : s'affaisse, se penche, se voile, puis une croix rouge s'abat dessus.
  */
-function RevealedCard({ player, won, size, index }: { player: Player; won: boolean; size: number; index: number }): React.JSX.Element {
+export function RevealedCard({ player, won, size, index }: { player: { name: string; icon: IconKey; eliminated: boolean }; won: boolean; size: number; index: number }): React.JSX.Element {
   const { colors } = useTheme();
   const move = useProgress(true, { duration: 700, delay: 350 + index * 120 });
   const cross = useProgress(!won, { duration: 320, delay: 1000 + index * 110 });
@@ -331,7 +338,7 @@ function RevealedCard({ player, won, size, index }: { player: Player; won: boole
       <Animated.View style={{ transform: [{ translateY: ty }, { scale: sc }, { rotate: rot }] }}>
         {won ? <Glow size={size} /> : null}
         <View>
-          <RoleTile icon={cardIcon(player, true)} active={won} size={size} shineAuto={won} shineDelay={1100 + index * 140} />
+          <RoleTile icon={player.icon} active={won} size={size} shineAuto={won} shineDelay={1100 + index * 140} />
           {!won ? (
             <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', opacity: cross, transform: [{ scale }] }}>
               <Stitch size={size * 0.78} color={ART.blood} width={3.2} />
@@ -385,11 +392,11 @@ export function GameOverPhase({ state, dispatch, actions, onNextRound }: {
           return (
             <View style={{ gap: 26, alignItems: 'center' }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20, justifyContent: 'center', paddingTop: 12 }}>
-                {winners.map((r, k) => <RevealedCard key={r.p.id} player={r.p} index={k} size={winners.length > 4 ? 104 : 128} won />)}
+                {winners.map((r, k) => <RevealedCard key={r.p.id} player={{ name: r.p.name, icon: cardIcon(r.p, true), eliminated: r.p.eliminated }} index={k} size={winners.length > 4 ? 104 : 128} won />)}
               </View>
               {losers.length > 0 ? (
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'center', paddingTop: 6 }}>
-                  {losers.map((r, k) => <RevealedCard key={r.p.id} player={r.p} index={k + winners.length} size={92} won={false} />)}
+                  {losers.map((r, k) => <RevealedCard key={r.p.id} player={{ name: r.p.name, icon: cardIcon(r.p, true), eliminated: r.p.eliminated }} index={k + winners.length} size={92} won={false} />)}
                 </View>
               ) : null}
             </View>
