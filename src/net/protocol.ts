@@ -61,7 +61,7 @@ export interface GameView {
   readonly modal: 'none' | 'announce' | 'pick' | 'guess';
   readonly players: readonly PublicPlayer[];
   /** Ma carte : uniquement la mienne, jamais celle d'un autre. */
-  readonly me: { readonly id: number; readonly card: CardView; readonly icon: IconKey; readonly eliminated: boolean; readonly viewed: boolean };
+  readonly me: { readonly id: number; readonly card: CardView; readonly icon: IconKey | null; readonly eliminated: boolean; readonly viewed: boolean };
   readonly timer: { readonly endsAt: number; readonly totalSec: number } | null;
   readonly vote: null | {
     readonly candidates: readonly number[];

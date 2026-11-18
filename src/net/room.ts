@@ -2,7 +2,7 @@ import {
   MAX_PLAYERS, MIN_PLAYERS, ROLE_NAMES, assignRound, baseRoleKey, buildScoreEntry, defaultSettings, describeCard, describeWarning,
   gameOverText, pickWordPair, playerWon, sanitizeSettings, type GameSettings, type Player, type UsedPairs, type WordTheme,
 } from '@/domain';
-import { cardIcon } from '@/features/roleMeta';
+import { cardIcon, secretCardIcon } from '@/features/roleMeta';
 import { alive, gameReducer, initialGameState, playerOf, type GameAction, type GameState } from '@/state/gameReducer';
 import { PROTOCOL_VERSION, type ClientMsg, type GameView, type PlayerView, type PublicPlayer, type ResultPlayer } from './protocol';
 
@@ -341,6 +341,7 @@ function gameView(room: RoomState, seatId: number): GameView | null {
   const mine = playerOf(g, meId);
   if (!g.active || !mine) return null;
   const over = g.phase === 'gameover';
+  const myCard = describeCard(mine, { players: g.players, showRole: room.settings.showRole, civilWordHint: g.civilWordHint });
   const players = g.players.map((p) => publicPlayer(room, p, over));
   const modal = g.modal === 'announce' || g.modal === 'pick' || g.modal === 'guess' ? g.modal : 'none';
   const name = (id: number | null): string => playerOf(g, id)?.name ?? '';
@@ -365,11 +366,7 @@ function gameView(room: RoomState, seatId: number): GameView | null {
 
   return {
     phase: g.phase, round: g.round, modal, players,
-    me: {
-      id: mine.id,
-      card: describeCard(mine, { players: g.players, showRole: room.settings.showRole, civilWordHint: g.civilWordHint }),
-      icon: cardIcon(mine), eliminated: mine.eliminated, viewed: mine.viewed,
-    },
+    me: { id: mine.id, card: myCard, icon: secretCardIcon(mine, myCard.roleLine !== ''), eliminated: mine.eliminated, viewed: mine.viewed },
     timer: room.timerEndsAt !== null ? { endsAt: room.timerEndsAt, totalSec: room.timerTotalSec } : null,
     vote: g.phase === 'vote' && modal === 'none' ? {
       candidates: candidates(room),

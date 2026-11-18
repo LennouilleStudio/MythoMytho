@@ -47,3 +47,21 @@ export function cardIcon(p: Player, withBadges = false): IconKey {
   }
   return p.baseRole === 'undercover' ? 'undercover' : 'civil';
 }
+
+/** Rôle « à badge » d'un joueur (Idiot, Fantôme, Mime, Procureur, Amoureux), s'il en a un : ce que son badge lui révèle déjà. */
+export function badgeIcon(p: Player): IconKey | null {
+  if (p.idiot) return 'idiot';
+  if (p.fantome) return 'fantome';
+  if (p.mime) return 'mime';
+  if (p.procureur) return 'procureur';
+  if (p.loverId !== null) return 'amoureux';
+  return null;
+}
+
+/**
+ * Illustration de la carte secrète d'un joueur : son rôle principal (badges compris) quand la ligne « Tu es… » est visible ;
+ * sinon seulement le rôle de son badge, déjà montré en clair sur la carte (jamais plus que ce que la carte révèle).
+ */
+export function secretCardIcon(p: Player, roleLineVisible: boolean): IconKey | null {
+  return roleLineVisible ? cardIcon(p, true) : badgeIcon(p);
+}

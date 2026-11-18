@@ -268,10 +268,10 @@ function Aging({ w, h, id, seed, full }: { w: number; h: number; id: string; see
  * Cadre gravé : double filet, étoiles aux angles, hachures dans deux coins opposés, gouttes de sang en option.
  * Le contenu est posé par-dessus ; l'appelant fournit le rembourrage (≥ 18) pour rester à l'intérieur du filet.
  */
-export function Frame({ children, style, bg, stroke, soft, accent, hatch = true, drips = false, seed = 7, dripCount, dripMax = 44, corners = true, crack = false, grain, aged }: {
+export function Frame({ children, style, bg, stroke, soft, accent, hatch = true, drips = false, seed = 7, dripCount, dripMax = 44, corners = true, crack = false, grain, grainOpacity = 0.3, aged }: {
   children?: React.ReactNode; style?: StyleProp<ViewStyle>; bg?: string; stroke?: string; soft?: string; accent?: string;
   hatch?: boolean; drips?: boolean; seed?: number; dripCount?: number; dripMax?: number; corners?: boolean; crack?: boolean;
-  /** Grain de papier (couleur du grain) : parchemin imprimé. */ grain?: string;
+  /** Grain de papier (couleur du grain) : parchemin imprimé. */ grain?: string; grainOpacity?: number;
   /** Vieillissement du parchemin : `light` (bord effiloché, angles assombris) ou `full` (plis, taches). Par défaut `light` en thème parchemin. */ aged?: 'light' | 'full' | false;
 }): React.JSX.Element {
   const { colors, mode } = useTheme();
@@ -310,7 +310,7 @@ export function Frame({ children, style, bg, stroke, soft, accent, hatch = true,
             <Path key={i} d={SPARK_PATH} fill={mark} transform={`translate(${(p[0] as number) - 4.5} ${(p[1] as number) - 4.5}) scale(${9 / 24})`} />
           )) : null}
           {crack ? <CrackShape color={colors.blood} points={[[w - 2, h * 0.62], [w - 20, h * 0.66], [w - 28, h * 0.74], [w - 46, h * 0.77]]} /> : null}
-          {grain ? <Grain w={w} h={h} color={grain} seed={seed + 1} opacity={0.3} /> : null}
+          {grain ? <Grain w={w} h={h} color={grain} seed={seed + 1} opacity={grainOpacity} /> : null}
         </Svg></Safe>
       ) : null}
       {drips && w > 0 ? <DripLayer width={w} seed={seed} count={dripCount ?? Math.max(2, Math.round(w / 90))} maxLen={dripMax} color={colors.blood} /> : null}
