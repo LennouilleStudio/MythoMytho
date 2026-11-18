@@ -15,7 +15,7 @@ import { useFeedback } from '../ui/useFeedback';
 import { RoleTile } from '../ui/RoleTile';
 import { DropStamp } from '../ui/Stamp';
 import { NATIVE, useProgress, useReducedMotion } from '../ui/motion';
-import { DashLine, Frame, Hatch, Plaque, Sparkle, Stitch, safeId } from '../ui/ornaments';
+import { DashLine, Frame, Hatch, Plaque, Safe, safeId, Sparkle, Stitch } from '../ui/ornaments';
 import { AppText, Button, Callout, Panel } from '../ui/primitives';
 
 type D = React.Dispatch<GameAction>;
@@ -307,7 +307,7 @@ function Glow({ size }: { size: number }): React.JSX.Element {
   const d = size * 1.7;
   return (
     <Animated.View pointerEvents="none" style={{ position: 'absolute', left: (size - d) / 2, top: (size - d) / 2, width: d, height: d, opacity: o.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0.95] }) }}>
-      <Svg width={d} height={d}>
+      <Safe><Svg width={d} height={d}>
         <Defs>
           <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%">
             <Stop offset="0.35" stopColor="#f1e8d0" stopOpacity={0.34} />
@@ -315,7 +315,7 @@ function Glow({ size }: { size: number }): React.JSX.Element {
           </RadialGradient>
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
-      </Svg>
+      </Svg></Safe>
     </Animated.View>
   );
 }

@@ -7,7 +7,7 @@ import { ART, fonts } from '@/theme/tokens';
 import { CardBackArt } from '../ui/CardBack';
 import { RoleTile } from '../ui/RoleTile';
 import { StampBadge } from '../ui/Stamp';
-import { Divider, Frame, Plaque } from '../ui/ornaments';
+import { Divider, Frame, Plaque, Safe } from '../ui/ornaments';
 import { AppText } from '../ui/primitives';
 
 const ILLU_W = 150;
@@ -17,10 +17,10 @@ function Bubble({ w, flip, tone }: { w: number; flip?: boolean; tone: string }):
   const h = w * 0.72;
   return (
     <View style={{ transform: [{ scaleX: flip ? -1 : 1 }] }}>
-      <Svg width={w} height={h} viewBox="0 0 60 44" fill="none" stroke={tone} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Safe><Svg width={w} height={h} viewBox="0 0 60 44" fill="none" stroke={tone} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
         <Path d="M8 4h44a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4H26l-10 9v-9H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z" />
         <Path d="M14 14h32M14 22h20" strokeWidth={1.6} />
-      </Svg>
+      </Svg></Safe>
     </View>
   );
 }

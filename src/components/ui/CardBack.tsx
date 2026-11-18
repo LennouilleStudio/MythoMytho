@@ -1,7 +1,7 @@
 import React, { useId } from 'react';
-import Svg, { Circle, Defs, G, Line, Path, Pattern, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, G, Path, Pattern, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { ART } from '@/theme/tokens';
-import { Grain, SPARK_PATH, safeId } from './ornaments';
+import { Grain, HatchLines, SPARK_PATH, Safe, safeId } from './ornaments';
 
 /** Teintes des dos de carte (violet, vert, bordeaux nuit) et petits emblèmes gravés : 3 × 8 combinaisons, une par joueur. */
 export const BACK_TINTS = [ART.violet, ART.green, ART.burgundy] as const;
@@ -54,10 +54,10 @@ export function CardBackSquare({ size, tint = ART.violet, mark = 0 }: { size: nu
   const id = safeId(useId());
   const C = ART.cream;
   return (
-    <Svg width={size} height={size} viewBox="0 0 300 300">
+    <Safe><Svg width={size} height={size} viewBox="0 0 300 300">
       <Defs>
-        <Pattern id={id} patternUnits="userSpaceOnUse" width={7} height={7} patternTransform="rotate(45)">
-          <Line x1={0} y1={0} x2={0} y2={7} stroke={C} strokeWidth={1.1} opacity={0.5} />
+        <Pattern id={id} patternUnits="userSpaceOnUse" width={7} height={7}>
+          <HatchLines gap={7} color={C} width={1.1} opacity={0.5} />
         </Pattern>
       </Defs>
       <Rect width={300} height={300} rx={6} fill={tint} />
@@ -68,7 +68,7 @@ export function CardBackSquare({ size, tint = ART.violet, mark = 0 }: { size: nu
       <Rect x={20} y={20} width={260} height={260} fill="none" stroke={C} strokeWidth={1} opacity={0.75} />
       <G transform="translate(0 -45)"><Emblem eye={tint} /></G>
       <Path d={MARKS[mark % MARKS.length] as string} fill={C} transform="translate(142 25) scale(0.65)" />
-    </Svg>
+    </Svg></Safe>
   );
 }
 
@@ -80,8 +80,8 @@ export function CardBackBody({ closed, tint = ART.violet, mark }: { closed?: boo
   return (
     <>
       <Defs>
-        <Pattern id={id} patternUnits="userSpaceOnUse" width={7} height={7} patternTransform="rotate(45)">
-          <Line x1={0} y1={0} x2={0} y2={7} stroke={C} strokeWidth={1.1} opacity={0.5} />
+        <Pattern id={id} patternUnits="userSpaceOnUse" width={7} height={7}>
+          <HatchLines gap={7} color={C} width={1.1} opacity={0.5} />
         </Pattern>
         <RadialGradient id={vg} cx={150} cy={190} r={250} gradientUnits="userSpaceOnUse">
           <Stop offset="0.55" stopColor="#000" stopOpacity={0} />
@@ -113,9 +113,9 @@ export function CardBackBody({ closed, tint = ART.violet, mark }: { closed?: boo
 /** Dos de carte (300 × 400) : œil, double cadre, hachures, craquelure, gouttes ; teinte et emblème propres à chaque joueur. */
 export function CardBackArt({ width, closed, tint = ART.violet, mark }: { width: number; closed?: boolean; tint?: string; mark?: number }): React.JSX.Element {
   return (
-    <Svg width={width} height={(width * 4) / 3} viewBox="0 0 300 400">
+    <Safe><Svg width={width} height={(width * 4) / 3} viewBox="0 0 300 400">
       <CardBackBody closed={closed} tint={tint} mark={mark} />
-    </Svg>
+    </Svg></Safe>
   );
 }
 
@@ -125,7 +125,7 @@ export function CardFrontArt({ width }: { width: number }): React.JSX.Element {
   const vg = `${id}v`;
   const I = ART.green; const P = '#e3d8bb'; const B = ART.blood;
   return (
-    <Svg width={width} height={(width * 4) / 3} viewBox="0 0 300 400">
+    <Safe><Svg width={width} height={(width * 4) / 3} viewBox="0 0 300 400">
       <Defs>
         <RadialGradient id={vg} cx={150} cy={190} r={250} gradientUnits="userSpaceOnUse">
           <Stop offset="0.5" stopColor="#3a2a10" stopOpacity={0} />
@@ -145,6 +145,6 @@ export function CardFrontArt({ width }: { width: number }): React.JSX.Element {
       ))}
       <Rect x={32} y={334} width={236} height={48} fill={P} stroke={I} strokeWidth={2.2} rx={2} />
       <Rect width={300} height={400} rx={6} fill={`url(#${vg})`} />
-    </Svg>
+    </Svg></Safe>
   );
 }

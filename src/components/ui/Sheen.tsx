@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Animated, Easing } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { NATIVE, useReducedMotion } from './motion';
-import { safeId } from './ornaments';
+import { Safe, safeId } from './ornaments';
 
 /** Bande de brillance diagonale qui traverse une carte (0 = hors carte à gauche, 1 = hors carte à droite). */
 export function Sheen({ progress, size }: { progress: Animated.Value; size: number }): React.JSX.Element {
@@ -14,7 +14,7 @@ export function Sheen({ progress, size }: { progress: Animated.Value; size: numb
       opacity: progress.interpolate({ inputRange: [0, 0.08, 0.92, 1], outputRange: [0, 1, 1, 0] }),
       transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [-band * 1.3, size + band * 0.3] }) }, { rotate: '22deg' }],
     }}>
-      <Svg width="100%" height="100%">
+      <Safe><Svg width="100%" height="100%">
         <Defs>
           <LinearGradient id={id} x1="0" y1="0" x2="1" y2="0">
             <Stop offset="0" stopColor="#fff6de" stopOpacity={0} />
@@ -23,7 +23,7 @@ export function Sheen({ progress, size }: { progress: Animated.Value; size: numb
           </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
-      </Svg>
+      </Svg></Safe>
     </Animated.View>
   );
 }

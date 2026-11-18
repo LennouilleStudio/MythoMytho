@@ -4,7 +4,7 @@ import Svg, { Defs, FeBlend, FeFlood, FeGaussianBlur, Filter, G, Path } from 're
 import { useTheme } from '@/theme/ThemeProvider';
 import { NATIVE, useReducedMotion } from './motion';
 import { AppText } from './primitives';
-import { DashLine, Sparkle } from './ornaments';
+import { DashLine, Safe, Sparkle } from './ornaments';
 import { LOGO_REFLECT_1, LOGO_REFLECT_2, LOGO_VIEWBOX, LOGO_WORD_1, LOGO_WORD_2 } from './logoPaths';
 
 /**
@@ -67,13 +67,13 @@ export function Wordmark(): React.JSX.Element {
   return (
     <View style={{ alignItems: 'center', marginBottom: Math.max(20, Math.min(34, width * 0.04)) }}>
       <View accessibilityRole="header" accessibilityLabel="MythoMytho" style={{ marginTop: -w * 0.04, marginBottom: -w * 0.055 }}>
-        <Svg width={w} height={h} viewBox={`0 0 ${LOGO_VIEWBOX.width} ${LOGO_VIEWBOX.height}`} fill="none">
+        <Safe><Svg width={w} height={h} viewBox={`0 0 ${LOGO_VIEWBOX.width} ${LOGO_VIEWBOX.height}`} fill="none">
           <Path d={LOGO_WORD_1} fill={RED} />
           {reflect(LOGO_REFLECT_1, 'mmReflect0')}
           <Path d={LOGO_WORD_2} fill={RED} />
           {reflect(LOGO_REFLECT_2, 'mmReflect1')}
           {blur ? <Defs>{filter('mmReflect0', 63.625)}{filter('mmReflect1', 406.625)}</Defs> : null}
-        </Svg>
+        </Svg></Safe>
         <LogoDrop w={w} h={h} color={RED} />
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, width: Math.min(w, 440), maxWidth: '100%' }}>

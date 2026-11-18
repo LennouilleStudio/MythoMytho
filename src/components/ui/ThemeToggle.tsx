@@ -3,6 +3,7 @@ import { Pressable } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius } from '@/theme/tokens';
+import { Safe } from './ornaments';
 
 /** Bouton nuit / parchemin, en haut à droite : soleil gravé en mode nuit, croissant en mode parchemin. */
 export function ThemeToggle({ top }: { top: number }): React.JSX.Element {
@@ -15,11 +16,11 @@ export function ThemeToggle({ top }: { top: number }): React.JSX.Element {
         borderColor: colors.lineStrong, backgroundColor: colors.panel, alignItems: 'center', justifyContent: 'center',
         transform: [{ scale: pressed ? 0.92 : 1 }],
       })}>
-      <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={colors.accent} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Safe><Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={colors.accent} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
         {mode === 'dark'
           ? <>{<Circle cx={12} cy={12} r={4} />}{rays.map((r, i) => <Line key={i} x1={r[0]} y1={r[1]} x2={r[2]} y2={r[3]} />)}</>
           : <Path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />}
-      </Svg>
+      </Svg></Safe>
     </Pressable>
   );
 }

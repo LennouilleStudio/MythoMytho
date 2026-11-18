@@ -5,7 +5,7 @@ import { MAX_PLAYERS, MIN_PLAYERS } from '@/domain';
 import { useTheme } from '@/theme/ThemeProvider';
 import { alpha } from '@/theme/color';
 import { fonts } from '@/theme/tokens';
-import { Hatch } from '../ui/ornaments';
+import { Hatch, Safe } from '../ui/ornaments';
 import { DashCard } from './DashCard';
 
 function Arrow({ dir, disabled, onPress }: { dir: -1 | 1; disabled: boolean; onPress: () => void }): React.JSX.Element {
@@ -13,9 +13,9 @@ function Arrow({ dir, disabled, onPress }: { dir: -1 | 1; disabled: boolean; onP
   return (
     <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={dir < 0 ? 'Un joueur de moins' : 'Un joueur de plus'}
       style={({ pressed }) => ({ width: 38, height: 38, borderRadius: 19, borderWidth: 1.5, borderColor: colors.lineStrong, backgroundColor: pressed ? alpha(colors.accent, 0.2) : 'transparent', alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.35 : 1 })}>
-      <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.accent} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <Safe><Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.accent} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
         <Path d={dir < 0 ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'} />
-      </Svg>
+      </Svg></Safe>
     </Pressable>
   );
 }

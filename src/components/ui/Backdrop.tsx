@@ -5,7 +5,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { HALO, getAmbience, onAmbience, type Ambience } from './ambience';
 import { onBleed } from './bleed';
 import { NATIVE, useReducedMotion } from './motion';
-import { CrackShape, DripLayer, Grain, SPARK_PATH, safeId } from './ornaments';
+import { CrackShape, DripLayer, Grain, HatchLines, SPARK_PATH, Safe, safeId } from './ornaments';
 
 /** Halo teinté de la phase (fondu à l'apparition) : un dégradé radial qui part du haut de l'écran. */
 function Halo({ color, w, h, fadeIn }: { color: string; w: number; h: number; fadeIn: boolean }): React.JSX.Element {
@@ -89,30 +89,30 @@ export function Backdrop(): React.JSX.Element {
   const corners: Array<[number, number]> = [[B + 9, B + 9], [w - B - 9, B + 9], [B + 9, h - B - 9], [w - B - 9, h - B - 9]];
   return (
     <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none' }}>
-      <Svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0 }}>
+      <Safe><Svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0 }}>
         <Defs>
           <RadialGradient id="mmBg" cx={w / 2} cy={-h * 0.1} rx={radius} ry={radius} gradientUnits="userSpaceOnUse">
             <Stop offset="0" stopColor={colors.glow} />
             <Stop offset="0.45" stopColor={colors.bg} />
             <Stop offset="1" stopColor={colors.vignette} />
           </RadialGradient>
-          <Pattern id="mmHatch" patternUnits="userSpaceOnUse" width={9} height={9} patternTransform="rotate(45)">
-            <Line x1={0} y1={0} x2={0} y2={9} stroke={colors.hatch} strokeWidth={1} opacity={0.4} />
+          <Pattern id="mmHatch" patternUnits="userSpaceOnUse" width={9} height={9}>
+            <HatchLines gap={9} color={colors.hatch} width={1} opacity={0.4} />
           </Pattern>
         </Defs>
         <Rect x={0} y={0} width={w} height={h} fill="url(#mmBg)" />
         <Rect x={0} y={0} width={w} height={h} fill="url(#mmHatch)" />
-      </Svg>
-      {halos.map((hl) => <Halo key={hl.key} w={w} h={h} fadeIn={hl.fade} color={hl.amb === 'none' ? colors.glow : HALO[hl.amb][mode]} />)}
-      <Candle w={w} h={h} color={mode === 'light' ? '#8a6a2a' : '#d9ccb0'} />
-      <Svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0 }}>
+      </Svg></Safe>
+      {halos.map((hl) => <Safe key={hl.key}><Halo w={w} h={h} fadeIn={hl.fade} color={hl.amb === 'none' ? colors.glow : HALO[hl.amb][mode]} /></Safe>)}
+      <Safe><Candle w={w} h={h} color={mode === 'light' ? '#8a6a2a' : '#d9ccb0'} /></Safe>
+      <Safe><Svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0 }}>
         <Rect x={A + 0.5} y={A + 0.5} width={w - A * 2 - 1} height={h - A * 2 - 1} fill="none" stroke={colors.line} strokeWidth={1.4} />
         <Rect x={B + 0.5} y={B + 0.5} width={w - B * 2 - 1} height={h - B * 2 - 1} fill="none" stroke={colors.line} strokeWidth={0.8} opacity={0.7} />
         {corners.map((p, i) => <Path key={i} d={SPARK_PATH} fill={colors.accentSoft} transform={`translate(${p[0] - 5} ${p[1] - 5}) scale(${10 / 24})`} />)}
         <CrackShape color={colors.blood} points={[[A, 76], [A + 14, 84], [A + 20, 100], [A + 40, 108], [A + 46, 124]]} />
         <CrackShape color={colors.blood} points={[[w - A, h - 150], [w - A - 16, h - 140], [w - A - 22, h - 120], [w - A - 44, h - 112]]} />
         <Grain w={w} h={h} color={colors.accent} seed={5} density={0.35} opacity={mode === 'light' ? 0.16 : 0.07} />
-      </Svg>
+      </Svg></Safe>
       <DripLayer width={w} seed={11} count={count} minLen={16} maxLen={maxLen} color={colors.blood} top={A} />
       {extra.map((sd) => <DripLayer key={sd} width={w} seed={sd} count={4} minLen={50} maxLen={Math.min(170, h * 0.2)} color={colors.blood} top={A} />)}
     </View>

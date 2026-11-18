@@ -7,13 +7,13 @@ import { alpha } from '@/theme/color';
 import { ROLE_BG } from '@/theme/roleArt';
 import { RoleArt } from './RoleArt';
 import { Sheen, useShine } from './Sheen';
-import { safeId } from './ornaments';
+import { Safe, safeId } from './ornaments';
 
 /** Vignettage de tranche : les bords de la carte s'assombrissent légèrement, comme un carton imprimé et manipulé. */
 export function EdgeVignette({ strength = 0.38, radius = 8 }: { strength?: number; radius?: number }): React.JSX.Element {
   const id = safeId(useId());
   return (
-    <Svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none' }}>
+    <Safe><Svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none' }}>
       <Defs>
         <RadialGradient id={id} cx="50%" cy="48%" rx="72%" ry="72%" fx="50%" fy="48%">
           <Stop offset="0.55" stopColor="#000" stopOpacity={0} />
@@ -21,7 +21,7 @@ export function EdgeVignette({ strength = 0.38, radius = 8 }: { strength?: numbe
         </RadialGradient>
       </Defs>
       <Rect x="0" y="0" width="100%" height="100%" rx={radius} fill={`url(#${id})`} />
-    </Svg>
+    </Svg></Safe>
   );
 }
 

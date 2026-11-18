@@ -4,7 +4,7 @@ import Svg, { Circle, ClipPath, Defs, G, Path, Polygon, Rect } from 'react-nativ
 import { useTheme } from '@/theme/ThemeProvider';
 import { ART } from '@/theme/tokens';
 import { CardBackBody } from './CardBack';
-import { CrackShape, SPARK_PATH, safeId } from './ornaments';
+import { CrackShape, Safe, safeId, SPARK_PATH } from './ornaments';
 
 /**
  * Petites scènes illustrées pour les états vides et les erreurs, dans le même vocabulaire que les cartes :
@@ -22,7 +22,7 @@ export function LoneCardScene({ width = 330 }: { width?: number }): React.JSX.El
   );
   return (
     <View style={{ alignSelf: 'center' }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Svg width={width} height={h} viewBox="0 0 300 190">
+      <Safe><Svg width={width} height={h} viewBox="0 0 300 190">
         {slot(14, -8)}{slot(206, 8)}
         <Circle cx={150} cy={178} r={104} fill="none" stroke={colors.line} strokeWidth={1} strokeDasharray="3 8" strokeLinecap="round" opacity={0.6} />
         <G transform="translate(112 18) rotate(-4 38 56) scale(0.25)">
@@ -32,7 +32,7 @@ export function LoneCardScene({ width = 330 }: { width?: number }): React.JSX.El
         <Path d={SPARK_PATH} fill={colors.accentSoft} transform="translate(232 24) scale(0.4)" />
         <Path d="M150 0V10" stroke={ART.blood} strokeWidth={3} strokeLinecap="round" />
         <Circle cx={150} cy={14} r={3} fill={ART.blood} />
-      </Svg>
+      </Svg></Safe>
     </View>
   );
 }
@@ -49,7 +49,7 @@ export function TornCardScene({ width = 220 }: { width?: number }): React.JSX.El
   const crack = teeth.map((p, i) => `${i ? 'L' : 'M'}${p[0]} ${p[1]}`).join('');
   return (
     <View style={{ alignSelf: 'center' }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Svg width={width} height={h} viewBox="0 0 380 440">
+      <Safe><Svg width={width} height={h} viewBox="0 0 380 440">
         <Defs>
           <ClipPath id={`${id}l`}><Polygon points={left} /></ClipPath>
           <ClipPath id={`${id}r`}><Polygon points={right} /></ClipPath>
@@ -64,7 +64,7 @@ export function TornCardScene({ width = 220 }: { width?: number }): React.JSX.El
         </G>
         <Path d="M170 410l8 14-12-4zM196 426l5 9-9-3z" fill={ART.cream} opacity={0.8} />
         <CrackShape color={ART.blood} points={[[20, 420], [40, 432], [52, 420]]} />
-      </Svg>
+      </Svg></Safe>
     </View>
   );
 }

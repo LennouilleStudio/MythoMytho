@@ -12,45 +12,77 @@ export const safeId = (raw: string): string => `mm${raw.replace(/[^a-zA-Z0-9_-]/
 
 const FILL: ViewStyle = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none' };
 
+/**
+ * Garde-fou pour les décors SVG : si `react-native-svg` échoue à dessiner un élément (différences entre plateformes),
+ * le décor disparaît au lieu de faire tomber toute l'application.
+ */
+export class Safe extends React.Component<{ children?: React.ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+  static getDerivedStateFromError(): { failed: boolean } { return { failed: true }; }
+  override componentDidCatch(error: unknown): void { console.warn('Décor SVG ignoré :', error); }
+  override render(): React.ReactNode { return this.state.failed ? null : this.props.children; }
+}
+
 /** Étoile à quatre branches (24 × 24). */
 export const SPARK_PATH = 'M12 1C12.8 7 17 11.2 23 12C17 12.8 12.8 17 12 23C11.2 17 7 12.8 1 12C7 11.2 11.2 7 12 1Z';
 
 export function Sparkle({ size = 10, color }: { size?: number; color: string }): React.JSX.Element {
-  return <Svg width={size} height={size} viewBox="0 0 24 24"><Path d={SPARK_PATH} fill={color} /></Svg>;
+  return <Safe><Svg width={size} height={size} viewBox="0 0 24 24"><Path d={SPARK_PATH} fill={color} /></Svg></Safe>;
 }
 
 /** Point de croix (✕ cousu), pour cases cochées et cartes écartées. */
 export function Stitch({ size = 14, color, width = 2.4 }: { size?: number; color: string; width?: number }): React.JSX.Element {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round">
-      <Path d="M5 5L19 19M19 5L5 19" />
-    </Svg>
+    <Safe>
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round">
+        <Path d="M5 5L19 19M19 5L5 19" />
+      </Svg>
+    </Safe>
+  );
+}
+
+/**
+ * Trois traits pour une tuile de hachures « / » sans aucune transformation (un `patternTransform` en chaîne fait échouer
+ * `react-native-svg` sur le web) : la diagonale du carreau et deux demi-diagonales qui raccordent les coins.
+ */
+export function HatchLines({ gap, color, width, opacity }: { gap: number; color: string; width: number; opacity?: number }): React.JSX.Element {
+  const h = gap / 2;
+  return (
+    <>
+      <Line x1={0} y1={gap} x2={gap} y2={0} stroke={color} strokeWidth={width} opacity={opacity} />
+      <Line x1={-h} y1={h} x2={h} y2={-h} stroke={color} strokeWidth={width} opacity={opacity} />
+      <Line x1={h} y1={gap + h} x2={gap + h} y2={h} stroke={color} strokeWidth={width} opacity={opacity} />
+    </>
   );
 }
 
 /** Hachures diagonales qui remplissent le parent (texture des illustrations). */
-export function Hatch({ color, gap = 6, width = 1, angle = 45, style }: {
-  color: string; gap?: number; width?: number; angle?: number; style?: StyleProp<ViewStyle>;
+export function Hatch({ color, gap = 6, width = 1, style }: {
+  color: string; gap?: number; width?: number; style?: StyleProp<ViewStyle>;
 }): React.JSX.Element {
   const id = safeId(useId());
   return (
-    <Svg width="100%" height="100%" style={[FILL, style]}>
-      <Defs>
-        <Pattern id={id} patternUnits="userSpaceOnUse" width={gap} height={gap} patternTransform={`rotate(${angle})`}>
-          <Line x1={0} y1={0} x2={0} y2={gap} stroke={color} strokeWidth={width} />
-        </Pattern>
-      </Defs>
-      <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id})`} />
-    </Svg>
+    <Safe>
+      <Svg width="100%" height="100%" style={[FILL, style]}>
+        <Defs>
+          <Pattern id={id} patternUnits="userSpaceOnUse" width={gap} height={gap}>
+            <HatchLines gap={gap} color={color} width={width} />
+          </Pattern>
+        </Defs>
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id})`} />
+      </Svg>
+    </Safe>
   );
 }
 
 /** Ligne en tirets (4 / 6, comme les rayons pointillés des illustrations). */
 export function DashLine({ color, style }: { color: string; style?: StyleProp<ViewStyle> }): React.JSX.Element {
   return (
-    <Svg width="100%" height={2} style={[{ flex: 1, minWidth: 8 }, style]}>
-      <Line x1={0} y1={1} x2="100%" y2={1} stroke={color} strokeWidth={1} strokeDasharray="4 6" strokeLinecap="round" />
-    </Svg>
+    <Safe>
+      <Svg width="100%" height={2} style={[{ flex: 1, minWidth: 8 }, style]}>
+        <Line x1={0} y1={1} x2="100%" y2={1} stroke={color} strokeWidth={1} strokeDasharray="4 6" strokeLinecap="round" />
+      </Svg>
+    </Safe>
   );
 }
 
@@ -164,7 +196,7 @@ export function DripLayer({ width, seed, count, minLen = 14, maxLen = 44, color,
   if (width <= 0) return null;
   return (
     <Animated.View pointerEvents="none" style={{ position: 'absolute', top, left: 0, width, height: H, transform: [{ translateY: -H / 2 }, { scaleY: grow }, { translateY: H / 2 }] }}>
-      <Svg width={width} height={H}><DripShapes drips={drips} color={color} /></Svg>
+      <Safe><Svg width={width} height={H}><DripShapes drips={drips} color={color} /></Svg></Safe>
     </Animated.View>
   );
 }
@@ -259,10 +291,10 @@ export function Frame({ children, style, bg, stroke, soft, accent, hatch = true,
   return (
     <View onLayout={onLayout} style={[{ backgroundColor: bg ?? colors.panel, borderRadius: radius.sm }, style]}>
       {w > 0 ? (
-        <Svg width={w} height={h} style={FILL}>
+        <Safe><Svg width={w} height={h} style={FILL}>
           <Defs>
-            <Pattern id={id} patternUnits="userSpaceOnUse" width={5} height={5} patternTransform="rotate(45)">
-              <Line x1={0} y1={0} x2={0} y2={5} stroke={colors.hatch} strokeWidth={1.1} />
+            <Pattern id={id} patternUnits="userSpaceOnUse" width={5} height={5}>
+              <HatchLines gap={5} color={colors.hatch} width={1.1} />
             </Pattern>
           </Defs>
           {hatch && t > 12 ? (
@@ -279,7 +311,7 @@ export function Frame({ children, style, bg, stroke, soft, accent, hatch = true,
           )) : null}
           {crack ? <CrackShape color={colors.blood} points={[[w - 2, h * 0.62], [w - 20, h * 0.66], [w - 28, h * 0.74], [w - 46, h * 0.77]]} /> : null}
           {grain ? <Grain w={w} h={h} color={grain} seed={seed + 1} opacity={0.3} /> : null}
-        </Svg>
+        </Svg></Safe>
       ) : null}
       {drips && w > 0 ? <DripLayer width={w} seed={seed} count={dripCount ?? Math.max(2, Math.round(w / 90))} maxLen={dripMax} color={colors.blood} /> : null}
       {children}

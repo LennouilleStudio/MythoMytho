@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useTheme } from '@/theme/ThemeProvider';
 import { ART } from '@/theme/tokens';
-import { Hatch, SPARK_PATH } from './ornaments';
+import { Hatch, Safe, SPARK_PATH } from './ornaments';
 
 const CROWN = 'M3 6l5 4 4-7 4 7 5-4-2 13H5Z';
 const PEN = 'M4 20L17 7M11 5l8 8M4 20l1.6-5';
@@ -35,7 +35,7 @@ export function ThemeBadge({ themeKey, size = 46, on }: { themeKey: string; size
     <View style={{ width: size, height: size, borderRadius: 3, backgroundColor: g.tint, borderWidth: 1.5, borderColor: on ? colors.accent : colors.line, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', opacity: on ? 1 : 0.72 }}>
       <Hatch color="rgba(217,204,176,0.2)" gap={5} />
       <View style={{ position: 'absolute', top: 3, left: 3, right: 3, bottom: 3, borderWidth: 1, borderColor: 'rgba(217,204,176,0.4)' }} />
-      <Svg width={size * 0.56} height={size * 0.56} viewBox="0 0 24 24">{g.node(ART.cream)}</Svg>
+      <Safe><Svg width={size * 0.56} height={size * 0.56} viewBox="0 0 24 24">{g.node(ART.cream)}</Svg></Safe>
     </View>
   );
 }
