@@ -1,6 +1,6 @@
 /* Service worker MythoMytho (web). Les bundles Expo ont des noms hachés : pas de liste de précache fixe,
    on met en cache à l'usage (stale-while-revalidate) et on sert la dernière page connue hors ligne. */
-const CACHE = 'mythomytho-v2.0.1';
+const CACHE = 'mythomytho-v2.1.0';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
@@ -14,6 +14,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  if (new URL(req.url).pathname === '/health') return; // sonde du serveur de parties : jamais en cache
   // Pages : réseau d'abord (jamais une coquille HTML périmée qui pointerait vers d'anciens bundles), cache en secours.
   if (req.mode === 'navigate') {
     event.respondWith(

@@ -21,7 +21,7 @@ export function GameScreen(): React.JSX.Element {
   const [armed, setArmed] = useState<'round' | 'game' | null>(null);
 
   // Si on arrive ici sans manche (rechargement de page), retour à la configuration.
-  useEffect(() => { if (!state.active) router.replace('/'); }, [state.active, router]);
+  useEffect(() => { if (!state.active) router.replace('/local'); }, [state.active, router]);
   // Confirmation en deux temps : un seul toucher accidentel ne doit pas perdre la manche.
   useEffect(() => {
     if (!armed) return;
@@ -52,7 +52,7 @@ export function GameScreen(): React.JSX.Element {
 
   const gameOver = state.phase === 'gameover';
   const newGame = (): void => {
-    if (gameOver || armed === 'game') { setArmed(null); quit(); router.replace('/'); } else setArmed('game');
+    if (gameOver || armed === 'game') { setArmed(null); quit(); router.replace('/local'); } else setArmed('game');
   };
   const newRound = (): void => {
     if (gameOver || armed === 'round') { setArmed(null); nextRound(); } else setArmed('round');

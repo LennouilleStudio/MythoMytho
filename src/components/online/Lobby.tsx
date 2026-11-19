@@ -13,7 +13,6 @@ import { RolesCard, type RoleInfo } from '../dashboard/RolesCard';
 import { ThemesCard } from '../dashboard/ThemesCard';
 import { useSummaryPills } from '../dashboard/SummaryCard';
 import { PlayerCard } from '../game/GamePanels';
-import { backStyle } from '../ui/CardBack';
 import { Plaque } from '../ui/ornaments';
 import { AppText, Button, Pill } from '../ui/primitives';
 

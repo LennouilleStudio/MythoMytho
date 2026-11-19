@@ -11,12 +11,21 @@ declare const process: { env: Record<string, string | undefined> };
 
 const KEYS = { session: 'mythomytho_online_session_v1', server: 'mythomytho_online_server_v1' } as const;
 
-/** Adresse du serveur par défaut : variable d'environnement Expo, sinon la machine qui sert l'application (web), sinon localhost. */
+/**
+ * Adresse du serveur par défaut :
+ * 1. `EXPO_PUBLIC_SERVER_URL` si définie ;
+ * 2. web en production : la même origine que la page (le serveur de parties sert aussi l'application, derrière TLS si besoin) ;
+ * 3. web en développement (`expo start`) : la machine qui sert l'application, port 8787 ;
+ * 4. natif : localhost:8787 (à régler dans « Adresse du serveur »).
+ */
 export function defaultServerUrl(): string {
   const env = process.env.EXPO_PUBLIC_SERVER_URL;
   if (env) return env;
-  const loc = (globalThis as unknown as { location?: { protocol: string; hostname: string } }).location;
-  if (Platform.OS === 'web' && loc) return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.hostname}:8787`;
+  const loc = (globalThis as unknown as { location?: { protocol: string; hostname: string; host: string } }).location;
+  if (Platform.OS === 'web' && loc) {
+    const scheme = loc.protocol === 'https:' ? 'wss' : 'ws';
+    return process.env.NODE_ENV === 'production' ? `${scheme}://${loc.host}` : `${scheme}://${loc.hostname}:8787`;
+  }
   return 'ws://localhost:8787';
 }
 

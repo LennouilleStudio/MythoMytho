@@ -7,7 +7,6 @@ import { buzz } from '@/services/feedback';
 import { cardIcon, secretCardIcon } from '@/features/roleMeta';
 import { useSettings } from '@/state/settings';
 import { alive, playerOf, type GameState, type GameAction } from '@/state/gameReducer';
-import { useTheme } from '@/theme/ThemeProvider';
 import { fonts, palettes, radius } from '@/theme/tokens';
 import { takeOrigin } from '../ui/cardOrigin';
 import { ModalSheet } from '../ui/ModalSheet';

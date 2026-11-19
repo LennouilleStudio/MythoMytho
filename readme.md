@@ -65,6 +65,21 @@ espacées, gouttes de sang effilées et craquelures rouges. Palette stricte dans
   journal vide, page 404, import de « Mes paires » invalide.
 * Icônes d'application et favicons PNG régénérés à partir de la carte « Le Mytho ».
 
+## Adresses
+
+| Adresse | Contenu |
+|---|---|
+| `/` | **Jeu en ligne** : pseudo, créer / rejoindre une salle (code à 4 lettres), salon, manche. Chaque joueur sur son appareil. |
+| `/local` | **Mode local** (un seul appareil, passé de main en main) : l'écran de configuration d'origine, inchangé. |
+| `/local/game` | Manche locale (lancée depuis `/local`). |
+| `/scores`, `/custom-pairs` | Journal des scores, « Mes paires » (communs aux deux modes). |
+| `/game`, `/online` | Anciennes adresses, redirigées vers `/local` et `/`. |
+
+Un seul processus suffit en production : `npm run start:prod` exporte l'application web (`dist/`), compile le moteur et lance le serveur,
+qui sert **les pages (avec repli sur `index.html`, donc `/local` fonctionne en accès direct ou après rechargement) et le WebSocket sur le même port**.
+Sur le web en production, l'application se connecte à sa propre origine (`wss://votre-domaine`) : aucun réglage d'adresse n'est nécessaire.
+`STATIC_DIR=…` change le dossier servi. Tests : `npm run test:server` (parties WebSocket + service des pages).
+
 ## Jouer en ligne (serveur autoritaire)
 
 Chaque joueur joue sur son propre appareil. Un petit serveur Node tient la partie ; les téléphones ne font qu'envoyer des intentions
@@ -78,7 +93,7 @@ npm run test:server         # test de bout en bout : vrais clients WebSocket con
 
 Dans l'application : « Jouer en ligne » (lien sous le logo). L'hôte crée une salle et communique son **code à 4 lettres** ; les autres le saisissent.
 L'adresse du serveur se règle dans « Adresse du serveur » (formulaire) ou par la variable `EXPO_PUBLIC_SERVER_URL` (ex. `ws://192.168.1.20:8787`,
-`wss://jeu.example.fr`). Sur le web, par défaut : la machine qui sert l'application, port 8787.
+`wss://jeu.example.fr`). Sur le web, par défaut : la même origine que la page en production, et la machine de développement sur le port 8787 avec `expo start`.
 
 **Ce que le serveur garantit**
 * Il exécute le même code que l'application (`src/domain`, `src/state/gameReducer.ts`, moteur `src/net/room.ts`, compilé tel quel par `server/build.mjs`).
@@ -108,8 +123,10 @@ la composition (rôles, thèmes, minuteur) se règle dans le salon et se fige au
 ```
 app/                      Routes Expo Router : fines, ne contiennent aucune logique
   _layout.tsx             polices, providers, Stack
-  index.tsx               configuration (+ raccourcis ?action=scores / ?action=pairs)
-  game.tsx  scores.tsx  custom-pairs.tsx  +not-found.tsx  +html.tsx (shell PWA)
+  index.tsx               accueil = jeu en ligne (+ raccourcis ?action=scores / ?action=pairs)
+  local/index.tsx         mode local : configuration     local/game.tsx  manche locale
+  online.tsx game.tsx     anciennes adresses (redirections)
+  scores.tsx  custom-pairs.tsx  +not-found.tsx  +html.tsx (shell PWA)
 src/
   domain/                 ★ TypeScript pur — aucun import React / React Native
     types.ts constants.ts text.ts roles.ts balance.ts words.ts

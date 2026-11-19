@@ -1,6 +1,7 @@
+import { Redirect } from 'expo-router';
 import React from 'react';
-import { OnlineScreen } from '@/components/online/OnlineScreen';
 
-export default function OnlineRoute(): React.JSX.Element {
-  return <OnlineScreen />;
+/** Ancienne adresse du mode en ligne : il est maintenant l'accueil. */
+export default function LegacyOnline(): React.JSX.Element {
+  return <Redirect href="/" />;
 }

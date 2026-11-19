@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { Animated, Easing, View, useWindowDimensions } from 'react-native';
-import Svg, { Defs, Line, Path, Pattern, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Defs, Path, Pattern, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useTheme } from '@/theme/ThemeProvider';
 import { HALO, getAmbience, onAmbience, type Ambience } from './ambience';
 import { onBleed } from './bleed';

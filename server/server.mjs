@@ -3,9 +3,12 @@
 // valide chaque intention d'un joueur et ne lui renvoie que SA vue filtrée.
 //
 //   node server/build.mjs && node server/server.mjs        (PORT=8787 par défaut ; ALLOWED_ORIGINS=https://a.fr,https://b.fr)
+// Il sert aussi l'application web exportée (`expo export -p web` → dist/, ou STATIC_DIR=…) : un seul processus pour /, /local et le jeu en ligne.
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import http from 'node:http';
-import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as E from './dist/engine.mjs';
 
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -85,9 +88,52 @@ function acceptWebSocket(req, socket, handlers) {
   return ws;
 }
 
+/* ------------------------------------------------------------------ fichiers statiques (application web exportée) */
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png',
+  '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.webp': 'image/webp', '.wav': 'audio/wav', '.mp3': 'audio/mpeg',
+  '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2', '.map': 'application/json', '.txt': 'text/plain; charset=utf-8',
+};
+
+/**
+ * Sert `root` : fichier exact s'il existe, sinon `index.html` pour toute adresse sans extension (/local, /scores… : application monopage,
+ * le routeur côté client prend le relais). Retourne false si rien n'est servi (le serveur répond alors 404).
+ */
+function serveStatic(root, req, res) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  let pathname;
+  try { pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { return false; }
+  if (pathname.includes('\0')) return false;
+  const rootAbs = path.resolve(root);
+  const candidate = path.resolve(rootAbs, '.' + pathname);
+  if (candidate !== rootAbs && !candidate.startsWith(rootAbs + path.sep)) return false; // pas de remontée hors du dossier
+  let file = candidate;
+  let stat = null;
+  try { stat = fs.statSync(file); if (stat.isDirectory()) { file = path.join(file, 'index.html'); stat = fs.statSync(file); } } catch { stat = null; }
+  if (!stat || !stat.isFile()) {
+    if (path.extname(pathname) !== '') return false; // fichier réclamé mais absent : vrai 404
+    file = path.join(rootAbs, 'index.html');
+    try { stat = fs.statSync(file); } catch { return false; }
+    if (!stat.isFile()) return false;
+  }
+  const ext = path.extname(file).toLowerCase();
+  const hashed = /[\\/]_expo[\\/]static[\\/]|[\\/]assets[\\/]assets[\\/]/.test(file);
+  res.writeHead(200, {
+    'content-type': MIME[ext] ?? 'application/octet-stream',
+    'content-length': stat.size,
+    'cache-control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache',
+    'x-content-type-options': 'nosniff',
+  });
+  if (req.method === 'HEAD') { res.end(); return true; }
+  fs.createReadStream(file).on('error', () => res.destroy()).pipe(res);
+  return true;
+}
+
 /* ------------------------------------------------------------------ serveur de parties */
 
-export function createGameServer({ allowedOrigins = null, now = () => Date.now(), roomTtlMs = 30 * 60 * 1000 } = {}) {
+export function createGameServer({ allowedOrigins = null, now = () => Date.now(), roomTtlMs = 30 * 60 * 1000, staticDir = null } = {}) {
   /** code → { room, conns: Map<seatId, Set<ws>>, last } */
   const rooms = new Map();
   const sockets = new Set();
@@ -207,8 +253,9 @@ export function createGameServer({ allowedOrigins = null, now = () => Date.now()
 
   const server = http.createServer((req, res) => {
     if (req.url === '/health') { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ ok: true, rooms: rooms.size })); }
+    if (staticDir && serveStatic(staticDir, req, res)) return;
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
-    res.end('MythoMytho — serveur de parties (WebSocket).');
+    res.end(staticDir ? 'Introuvable.' : 'MythoMytho — serveur de parties (WebSocket).');
   });
   server.on('upgrade', (req, socket) => {
     const origin = req.headers.origin;
@@ -237,7 +284,10 @@ export function createGameServer({ allowedOrigins = null, now = () => Date.now()
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const origins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean) : null;
-  const srv = createGameServer({ allowedOrigins: origins });
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const staticDir = process.env.STATIC_DIR ?? path.join(here, '..', 'dist');
+  const hasApp = fs.existsSync(path.join(staticDir, 'index.html'));
+  const srv = createGameServer({ allowedOrigins: origins, staticDir: hasApp ? staticDir : null });
   const port = await srv.listen(Number(process.env.PORT ?? 8787));
-  console.log(`MythoMytho — serveur de parties sur le port ${port}${origins ? ` (origines : ${origins.join(', ')})` : ''}`);
+  console.log(`MythoMytho — serveur de parties sur le port ${port}${origins ? ` (origines : ${origins.join(', ')})` : ''} — ${hasApp ? `application servie depuis ${staticDir}` : 'application absente (lancez « npm run build:web »)'}`);
 }

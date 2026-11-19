@@ -31,7 +31,7 @@ export function SetupScreen(): React.JSX.Element {
   const [info, setInfo] = useState<RoleInfo | null>(null);
   useEffect(() => watchInstallable(setInstallable), []);
 
-  const start = (): void => { if (startGame(names)) router.push('/game'); };
+  const start = (): void => { if (startGame(names)) router.push('/local/game'); };
 
   // Colonne de droite (grand écran) : « Prêt à jouer ? » puis « Noms des joueurs », puis le reste.
   // Une seule colonne (mobile) : même enchaînement, « Noms des joueurs » reste juste après « Prêt à jouer ? ».
@@ -60,7 +60,7 @@ export function SetupScreen(): React.JSX.Element {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
           <AppText title size={24}>Nouvelle manche</AppText>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18 }}>
-            <LinkButton label="Jouer en ligne" onPress={() => router.push('/online')} />
+            <LinkButton label="Jouer en ligne" onPress={() => router.push('/')} />
             <LinkButton label="Journal des scores" onPress={() => router.push('/scores')} />
             {installable ? <LinkButton label="Installer l'app" onPress={() => { void promptInstall(); }} /> : null}
             <LinkButton label="Comment jouer" chevron open={rules} onPress={() => setRules((r) => !r)} />

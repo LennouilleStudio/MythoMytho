@@ -354,7 +354,6 @@ export function RevealedCard({ player, won, size, index }: { player: { name: str
 export function GameOverPhase({ state, dispatch, actions, onNextRound }: {
   state: GameState; dispatch: D; actions: BottomActions; onNextRound: () => void;
 }): React.JSX.Element {
-  const { colors } = useTheme();
   const toast = useToast();
   if (!state.winner) return <View />;
   const text = gameOverText(state.winner, state.winnerReason, state.winnerDetail, state.players, state.civilWord);

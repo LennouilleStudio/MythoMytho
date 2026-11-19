@@ -47,7 +47,11 @@ export function JoinForm(): React.JSX.Element {
           {online.canResume ? <Button variant="ghost" small label="Reprendre ma dernière partie" onPress={online.resume} /> : null}
           <LinkButton label={advanced ? 'Masquer le serveur' : 'Adresse du serveur'} chevron open={advanced} onPress={() => setAdvanced((a) => !a)} />
           {advanced ? <Field label="Serveur" value={online.serverUrl} onChangeText={online.setServerUrl} autoCapitalize="none" autoCorrect={false} placeholder="ws://192.168.1.20:8787" /> : null}
-          <LinkButton label="← Retour" onPress={() => router.back()} />
+          <Divider />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18 }}>
+            <LinkButton label="Jouer sur un seul appareil" onPress={() => router.push('/local')} />
+            <LinkButton label="Journal des scores" onPress={() => router.push('/scores')} />
+          </View>
         </View>
       </Dossier>
     </View>

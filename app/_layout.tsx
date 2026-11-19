@@ -16,7 +16,8 @@ function Shell(): React.JSX.Element {
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: 'fade' }}>
         <Stack.Screen name="index" />
-        <Stack.Screen name="game" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="local/index" />
+        <Stack.Screen name="local/game" options={{ gestureEnabled: false }} />
         <Stack.Screen name="scores" options={{ presentation: 'modal' }} />
         <Stack.Screen name="custom-pairs" options={{ presentation: 'modal' }} />
       </Stack>
