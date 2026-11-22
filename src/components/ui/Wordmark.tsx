@@ -57,8 +57,9 @@ export function Wordmark(): React.JSX.Element {
   const reflect = (d: string, id: string): React.JSX.Element => (
     <G filter={blur ? `url(#${id})` : undefined}><Path d={d} fill={RED} fillOpacity={0.4} /></G>
   );
+  // `colorInterpolationFilters` manque aux types de react-native-svg mais reste utile : on le passe sans typage.
   const filter = (id: string, x: number): React.JSX.Element => (
-    <Filter id={id} x={x} y={116.75} width={327.125} height={130.312} filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+    <Filter id={id} x={x} y={116.75} width={327.125} height={130.312} filterUnits="userSpaceOnUse" {...({ colorInterpolationFilters: 'sRGB' } as object)}>
       <FeFlood floodOpacity={0} result="BackgroundImageFix" />
       <FeBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
       <FeGaussianBlur stdDeviation={0.9} result="blur" />

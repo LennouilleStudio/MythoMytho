@@ -1,6 +1,6 @@
 import {
-  MAX_PLAYERS, MIN_PLAYERS, ROLE_NAMES, assignRound, baseRoleKey, buildScoreEntry, defaultSettings, describeCard, describeWarning,
-  gameOverText, pickWordPair, playerWon, sanitizeSettings, type GameSettings, type Player, type UsedPairs, type WordTheme,
+  CUSTOM_THEME_KEY, MAX_PLAYERS, MIN_PLAYERS, ROLE_NAMES, assignRound, baseRoleKey, buildScoreEntry, defaultSettings, describeCard, describeWarning,
+  gameOverText, pickWordPair, playerWon, sanitizeCustomPairs, sanitizeSettings, type GameSettings, type Player, type UsedPairs, type WordPair, type WordTheme,
 } from '@/domain';
 import { cardIcon, secretCardIcon } from '@/features/roleMeta';
 import { alive, gameReducer, initialGameState, playerOf, type GameAction, type GameState } from '@/state/gameReducer';
@@ -31,6 +31,10 @@ export interface RoomState {
   readonly tieNote: string | null;
   readonly timerEndsAt: number | null;
   readonly timerTotalSec: number;
+  /** Le serveur a constaté la fin du minuteur (voir `tick`). */
+  readonly timerOver: boolean;
+  /** Paires personnalisées de l'hôte (thème « Mes paires » de la salle). */
+  readonly customPairs: readonly WordPair[];
   readonly notices: readonly string[];
 }
 
@@ -72,13 +76,13 @@ export function createRoom(code: string, hostName: string, deps: Deps): { room: 
   const room: RoomState = {
     code, hostId: 0, seats: [{ id: 0, name, token, connected: true }], nextSeatId: 1,
     settings: defaultSettings, game: initialGameState, roster: [], round: 1, used: {}, ballots: {}, voteTurn: 0, restrictTo: null,
-    tieNote: null, timerEndsAt: null, timerTotalSec: 0, notices: [],
+    tieNote: null, timerEndsAt: null, timerTotalSec: 0, timerOver: false, customPairs: [], notices: [],
   };
   return { room, seatId: 0, token };
 }
 
+/** En cours de manche, un nouvel arrivant devient spectateur : il regarde et joue à partir de la manche suivante. */
 export function joinRoom(room: RoomState, rawName: string, deps: Deps): { room: RoomState; seatId: number; token: string } | { error: string } {
-  if (room.game.active) return { error: 'La partie a déjà commencé : reconnectez-vous avec votre lien si vous en faisiez partie.' };
   if (room.seats.length >= MAX_PLAYERS) return { error: `Salle pleine (${MAX_PLAYERS} joueurs).` };
   const name = uniqueName(room.seats, cleanName(rawName));
   const token = deps.token();
@@ -90,15 +94,27 @@ export function findSeatByToken(room: RoomState, token: string): Seat | undefine
   return room.seats.find((s) => s.token === token);
 }
 
-/** Marque un siège (dé)connecté ; si l'hôte part, le premier joueur connecté reprend le rôle d'hôte. */
-export function setConnected(room: RoomState, seatId: number, connected: boolean): RoomState {
+/**
+ * Marque un siège (dé)connecté. Par défaut, si l'hôte part, le premier joueur connecté reprend tout de suite le rôle d'hôte.
+ * Avec `keepHost`, l'hôte garde son rôle (le serveur laisse un délai de grâce, puis appelle `electHost`).
+ */
+export function setConnected(room: RoomState, seatId: number, connected: boolean, keepHost = false): RoomState {
   const seats = room.seats.map((s) => (s.id === seatId ? { ...s, connected } : s));
   let hostId = room.hostId;
   const host = seats.find((s) => s.id === hostId);
-  if (!host || !host.connected) hostId = seats.find((s) => s.connected)?.id ?? hostId;
+  if (!keepHost && (!host || !host.connected)) hostId = seats.find((s) => s.connected)?.id ?? hostId;
   const next: RoomState = { ...room, seats, hostId };
   // Un joueur qui part ne doit pas bloquer un vote déjà complet côté présents.
   return next.game.active && next.game.phase === 'vote' && next.game.modal === 'none' ? maybeTally(next).room : next;
+}
+
+/** Passe la main au premier joueur connecté si l'hôte est absent (les joueurs de la manche passent avant les spectateurs). */
+export function electHost(room: RoomState): RoomState {
+  const host = room.seats.find((s) => s.id === room.hostId);
+  if (host && host.connected) return room;
+  const live = room.seats.filter((s) => s.connected);
+  const next = live.find((s) => room.roster.includes(s.id)) ?? live[0];
+  return next ? { ...room, hostId: next.id } : room;
 }
 
 function removeSeat(room: RoomState, seatId: number): RoomState {
@@ -123,12 +139,24 @@ function act(room: RoomState, action: GameAction): RoomState {
 
 const allViewed = (g: GameState): boolean => g.players.length > 0 && g.players.every((p) => p.viewed);
 
+/** Thèmes de la salle : ceux du jeu + « Mes paires » de l'hôte quand il en a envoyé. */
+function themesOf(room: RoomState, deps: Deps): readonly WordTheme[] {
+  return room.customPairs.length > 0
+    ? [...deps.themes, { key: CUSTOM_THEME_KEY, label: 'Mes paires', desc: 'Paires personnalisées de l\'hôte', pairs: room.customPairs, custom: true }]
+    : deps.themes;
+}
+
 function launch(room: RoomState, round: number, deps: Deps): Outcome {
-  if (room.seats.length < MIN_PLAYERS) return fail(room, `Il faut au moins ${MIN_PLAYERS} joueurs.`);
-  const names = room.seats.map((s) => s.name);
+  // Joueurs de la manche = sièges connectés. Un absent ne bloque ni les cartes ni le vote ; à son retour il regarde, puis joue à la manche suivante.
+  // Un spectateur parti sans jamais jouer ne garde pas son siège.
+  const kept = room.seats.filter((s) => s.connected || room.roster.includes(s.id));
+  const players = kept.filter((s) => s.connected);
+  if (players.length < MIN_PLAYERS) return fail(room, `Il faut au moins ${MIN_PLAYERS} joueurs connectés.`);
+  const names = players.map((s) => s.name);
   const settings = sanitizeSettings({ ...room.settings, playerCount: names.length });
-  const selected = Object.keys(settings.selectedThemes).filter((k) => deps.themes.some((t) => t.key === k));
-  const draw = pickWordPair({ themes: deps.themes, selectedKeys: selected, difficulty: settings.difficulty, used: room.used });
+  const themes = themesOf(room, deps);
+  const selected = Object.keys(settings.selectedThemes).filter((k) => themes.some((t) => t.key === k));
+  const draw = pickWordPair({ themes, selectedKeys: selected, difficulty: settings.difficulty, used: room.used });
   if (!draw) return fail(room, 'Aucune paire de mots disponible.');
   const assign = assignRound({
     names, undercoverCount: settings.undercoverCount, mrWhiteCount: settings.mrWhiteCount, espionCount: settings.espionCount,
@@ -139,8 +167,8 @@ function launch(room: RoomState, round: number, deps: Deps): Outcome {
   if (w) notices.push(describeWarning(w));
   const game = gameReducer(initialGameState, { type: 'START', round, assign, pair: draw.pair });
   return ok({
-    ...room, settings, game, round, used: draw.used, roster: room.seats.map((s) => s.id),
-    ballots: {}, voteTurn: 0, restrictTo: null, tieNote: null, timerEndsAt: null, timerTotalSec: 0, notices,
+    ...room, seats: kept, settings, game, round, used: draw.used, roster: players.map((s) => s.id),
+    ballots: {}, voteTurn: 0, restrictTo: null, tieNote: null, timerEndsAt: null, timerTotalSec: 0, timerOver: false, notices,
   });
 }
 
@@ -201,13 +229,28 @@ export function handle(room: RoomState, seatId: number, msg: ClientMsg, deps: De
 
     case 'kick': {
       const h = needHost(); if (h) return h;
-      if (g.active) return fail(room, 'On ne retire personne en cours de manche.');
+      if (g.active && room.roster.includes(msg.seatId)) return fail(room, 'On ne retire pas un joueur en cours de manche.');
       if (msg.seatId === room.hostId || !room.seats.some((s) => s.id === msg.seatId)) return fail(room, 'Joueur introuvable.');
       return ok(removeSeat(room, msg.seatId));
     }
 
+    case 'promote': {
+      const h = needHost(); if (h) return h;
+      const target = room.seats.find((s) => s.id === msg.seatId);
+      if (!target || target.id === room.hostId) return fail(room, 'Joueur introuvable.');
+      if (!target.connected) return fail(room, 'Ce joueur est hors ligne.');
+      return ok({ ...room, hostId: target.id });
+    }
+
+    case 'pairs': {
+      const h = needHost(); if (h) return h;
+      if (g.active) return fail(room, 'Les paires se modifient dans le salon.');
+      return ok({ ...room, customPairs: sanitizeCustomPairs(msg.pairs) });
+    }
+
     case 'leave': {
-      if (!g.active) return ok(removeSeat(room, seatId));
+      // Hors manche, ou spectateur : le siège disparaît. Un joueur en pleine manche garde sa place (il peut revenir).
+      if (!g.active || me < 0) return ok(removeSeat(room, seatId));
       return ok(setConnected(room, seatId, false));
     }
 
@@ -232,13 +275,13 @@ export function handle(room: RoomState, seatId: number, msg: ClientMsg, deps: De
     case 'startVote': {
       const h = needHost(); if (h) return h;
       if (g.phase !== 'reveal' || !allViewed(g)) return fail(room, 'Tous les joueurs doivent avoir consulté leur carte.');
-      return ok({ ...act(room, { type: 'START_VOTE' }), timerEndsAt: null, ballots: {}, voteTurn: 0, restrictTo: null, tieNote: null });
+      return ok({ ...act(room, { type: 'START_VOTE' }), timerEndsAt: null, timerOver: false, ballots: {}, voteTurn: 0, restrictTo: null, tieNote: null });
     }
 
     case 'extend': {
       const h = needHost(); if (h) return h;
       if (room.timerEndsAt === null) return fail(room, 'Aucun minuteur en cours.');
-      return ok({ ...room, timerEndsAt: Math.max(room.timerEndsAt, deps.now) + 60000, timerTotalSec: room.timerTotalSec + 60 });
+      return ok({ ...room, timerEndsAt: Math.max(room.timerEndsAt, deps.now) + 60000, timerTotalSec: room.timerTotalSec + 60, timerOver: false });
     }
 
     case 'vote': {
@@ -313,7 +356,7 @@ export function handle(room: RoomState, seatId: number, msg: ClientMsg, deps: De
       if (!g.active) return ok(room);
       // Les absents quittent le salon : on ne ramène que les joueurs connectés.
       const kept = room.seats.filter((s) => s.connected);
-      return ok({ ...room, seats: kept, hostId: kept.some((s) => s.id === room.hostId) ? room.hostId : (kept[0]?.id ?? room.hostId), game: initialGameState, roster: [], ballots: {}, restrictTo: null, tieNote: null, timerEndsAt: null, notices: [] });
+      return ok({ ...room, seats: kept, hostId: kept.some((s) => s.id === room.hostId) ? room.hostId : (kept[0]?.id ?? room.hostId), game: initialGameState, roster: [], ballots: {}, restrictTo: null, tieNote: null, timerEndsAt: null, timerOver: false, notices: [] });
     }
 
     case 'create': case 'join': case 'rejoin':
@@ -323,6 +366,22 @@ export function handle(room: RoomState, seatId: number, msg: ClientMsg, deps: De
       // Message venu du réseau : le type TypeScript ne garantit rien à l'exécution.
       return fail(room, 'Action inconnue.');
   }
+}
+
+/* ------------------------------------------------------------------ horloge */
+
+/**
+ * Appelé régulièrement par le serveur : le minuteur de discussion est jugé ICI, avec l'horloge du serveur, pas par chaque client.
+ * À la fin du temps, tous reçoivent `timer.over` au même instant. Si l'hôte est hors ligne à ce moment, le vote s'ouvre tout seul
+ * (sinon la partie resterait bloquée) ; sinon la main reste à l'hôte. Renvoie la même salle s'il n'y a rien à changer.
+ */
+export function tick(room: RoomState, now: number): RoomState {
+  const g = room.game;
+  if (!g.active || g.phase !== 'reveal' || room.timerEndsAt === null || room.timerOver || now < room.timerEndsAt) return room;
+  const over: RoomState = { ...room, timerOver: true };
+  const hostHere = room.seats.some((s) => s.id === room.hostId && s.connected);
+  if (hostHere || !allViewed(g)) return over;
+  return { ...act(over, { type: 'START_VOTE' }), timerEndsAt: null, timerOver: false, ballots: {}, voteTurn: 0, restrictTo: null, tieNote: 'Temps écoulé et hôte absent : le vote est ouvert.' };
 }
 
 /* ------------------------------------------------------------------ vue filtrée */
@@ -339,12 +398,14 @@ function gameView(room: RoomState, seatId: number): GameView | null {
   const g = room.game;
   const meId = playerIdOf(room, seatId);
   const mine = playerOf(g, meId);
-  if (!g.active || !mine) return null;
+  if (!g.active) return null;
+  // Pas de carte pour ce siège : il est arrivé (ou revenu) en cours de manche → spectateur.
   const over = g.phase === 'gameover';
-  const myCard = describeCard(mine, { players: g.players, showRole: room.settings.showRole, civilWordHint: g.civilWordHint });
+  const myCard = mine ? describeCard(mine, { players: g.players, showRole: room.settings.showRole, civilWordHint: g.civilWordHint }) : null;
   const players = g.players.map((p) => publicPlayer(room, p, over));
   const modal = g.modal === 'announce' || g.modal === 'pick' || g.modal === 'guess' ? g.modal : 'none';
   const name = (id: number | null): string => playerOf(g, id)?.name ?? '';
+  const spectators = room.seats.filter((s) => !room.roster.includes(s.id)).map((s) => s.name);
 
   const pickActor = g.pickPurpose === 'orion' ? g.pendingOrionId : g.pendingPrometheusId;
   const guesser = g.guessQueue[0] ?? null;
@@ -365,14 +426,14 @@ function gameView(room: RoomState, seatId: number): GameView | null {
   }
 
   return {
-    phase: g.phase, round: g.round, modal, players,
-    me: { id: mine.id, card: myCard, icon: secretCardIcon(mine, myCard.roleLine !== ''), eliminated: mine.eliminated, viewed: mine.viewed },
-    timer: room.timerEndsAt !== null ? { endsAt: room.timerEndsAt, totalSec: room.timerTotalSec } : null,
+    phase: g.phase, round: g.round, spectator: !mine, spectators, modal, players,
+    me: mine && myCard ? { id: mine.id, card: myCard, icon: secretCardIcon(mine, myCard.roleLine !== ''), eliminated: mine.eliminated, viewed: mine.viewed } : null,
+    timer: room.timerEndsAt !== null ? { endsAt: room.timerEndsAt, totalSec: room.timerTotalSec, over: room.timerOver } : null,
     vote: g.phase === 'vote' && modal === 'none' ? {
       candidates: candidates(room),
       voted: Object.keys(room.ballots).map(Number),
       myVote: room.ballots[meId] ?? null,
-      canVote: !mine.eliminated,
+      canVote: !!mine && !mine.eliminated,
       turn: room.voteTurn,
       note: room.tieNote,
     } : null,
@@ -400,6 +461,6 @@ export function viewFor(room: RoomState, seatId: number, now: number): PlayerVie
     v: PROTOCOL_VERSION, code: room.code, seatId, isHost: room.hostId === seatId, serverNow: now,
     stage: room.game.active ? 'game' : 'lobby',
     seats: room.seats.map((s) => ({ id: s.id, name: s.name, connected: s.connected, host: s.id === room.hostId })),
-    settings: room.settings, notices: room.notices, game: gameView(room, seatId),
+    settings: room.settings, customPairCount: room.customPairs.length, notices: room.notices, game: gameView(room, seatId),
   };
 }

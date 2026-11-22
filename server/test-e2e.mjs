@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { createGameServer } from './server.mjs';
 
-const srv = createGameServer();
+const srv = createGameServer({ hostGraceMs: 0 }); // passage d'hôte immédiat dans ce test (le délai de grâce a son propre test)
 const port = await srv.listen(0, '127.0.0.1');
 const URL_WS = `ws://127.0.0.1:${port}`;
 let checks = 0;
@@ -214,8 +214,9 @@ try {
   ok(ghost.errors.some((e) => /expirée/.test(e)), 'jeton invalide refusé');
   const late = await new Client('Retardataire').connect();
   late.send({ t: 'join', code: host.code, name: 'Retard' });
-  await sleep(150);
-  ok(late.errors.some((e) => /commencé/.test(e)), 'on ne rejoint pas une partie en cours');
+  await late.until((v) => v.stage === 'game' && v.game && v.game.spectator, 'un retardataire entre en spectateur');
+  ok(late.view.game.me === null, 'le spectateur n\'a pas de carte');
+  late.send({ t: 'leave' }); await sleep(120); late.ws.close(); // il repartira : la manche 2 reste à 5 joueurs
   const nowhere = await new Client('Perdu').connect();
   nowhere.send({ t: 'join', code: 'ZZZZ', name: 'X' }); await sleep(120);
   ok(nowhere.errors.some((e) => /introuvable/.test(e)), 'code inconnu refusé');

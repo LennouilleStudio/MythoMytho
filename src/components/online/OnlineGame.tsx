@@ -46,7 +46,8 @@ function OnlineTimer({ view, g }: { view: PlayerView; g: GameView }): React.JSX.
     const id = setInterval(() => tick((n) => n + 1), 250);
     return () => clearInterval(id);
   }, [t]);
-  const leftMs = t ? Math.max(0, t.endsAt - serverNow()) : 0;
+  // Le serveur est l'horloge de référence : `t.over` met tous les joueurs d'accord, même si leur horloge locale dérive.
+  const leftMs = t ? (t.over ? 0 : Math.max(0, t.endsAt - serverNow())) : 0;
   useEffect(() => {
     if (!t) { done.current = false; return; }
     if (leftMs > 0) { done.current = false; return; }
@@ -82,14 +83,16 @@ function RevealPhase({ view, g, onOpenCard }: { view: PlayerView; g: GameView; o
     <View>
       <Callout>
         <AppText tone="muted" size={12.5} style={{ lineHeight: 20 }}>
-          {'Touchez '}<AppText bold tone="muted" size={12.5}>votre carte</AppText>{' pour lire votre mot : vous seul(e) le recevez. Les autres cartes sont celles des autres joueurs ; elles s\'éteignent quand leur propriétaire a lu la sienne.'}
+          {g.spectator
+            ? 'Les joueurs lisent chacun leur carte : vous voyez qui a terminé, sans rien savoir des mots.'
+            : <>{'Touchez '}<AppText bold tone="muted" size={12.5}>votre carte</AppText>{' pour lire votre mot : vous seul(e) le recevez. Les autres cartes sont celles des autres joueurs ; elles s\'éteignent quand leur propriétaire a lu la sienne.'}</>}
         </AppText>
       </Callout>
       <View style={{ height: 22 }} />
       <OnlineTimer view={view} g={g} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 26, paddingTop: 4 }}>
         {g.players.map((p) => {
-          const mine = p.id === g.me.id;
+          const mine = p.id === g.me?.id;
           return (
             <View key={p.id} style={{ alignItems: 'center', gap: 6 }}>
               <PlayerCard flip={mine} player={p} index={p.id} faded={!mine && p.viewed} caption={mine ? 'ma carte' : p.viewed ? 'carte lue' : 'pas encore lue'}
@@ -121,7 +124,7 @@ function VotePhase({ view, g }: { view: PlayerView; g: GameView }): React.JSX.El
       <AppText title size={20} style={{ marginBottom: 10 }}>Vote d'élimination</AppText>
       <Callout accent="blood">
         <AppText tone="muted" size={12.5} style={{ lineHeight: 20 }}>
-          {v?.canVote ? 'Chacun vote en secret pour le joueur à éliminer : touchez sa carte. Vous pouvez changer d\'avis tant que tout le monde n\'a pas voté.' : 'Vous êtes éliminé(e) : vous suivez le vote sans y participer.'}
+          {v?.canVote ? 'Chacun vote en secret pour le joueur à éliminer : touchez sa carte. Vous pouvez changer d\'avis tant que tout le monde n\'a pas voté.' : g.spectator ? 'Vous regardez la manche en spectateur : vous votez à partir de la suivante.' : 'Vous êtes éliminé(e) : vous suivez le vote sans y participer.'}
         </AppText>
       </Callout>
       {v?.note ? <View style={{ marginTop: 12 }}><Callout tone="ok"><AppText size={12.5}>{v.note}</AppText></Callout></View> : null}
@@ -129,7 +132,7 @@ function VotePhase({ view, g }: { view: PlayerView; g: GameView }): React.JSX.El
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 26, paddingTop: 4 }}>
         {g.players.map((p) => {
           const isCandidate = v?.candidates.includes(p.id) ?? false;
-          const mine = p.id === g.me.id;
+          const mine = p.id === g.me?.id;
           const votedFor = v?.myVote === p.id;
           const hasVoted = v?.voted.includes(p.id) ?? false;
           const canPick = !!v?.canVote && isCandidate && !mine;
@@ -325,12 +328,13 @@ export function OnlineGame(): React.JSX.Element {
     <Screen>
       <Page>
         {status === 'reconnecting' ? <View style={{ marginBottom: 14 }}><Callout accent="blood"><AppText size={12.5}>Connexion perdue… reconnexion en cours. Votre place est conservée.</AppText></Callout></View> : null}
+        {g.spectator ? <View style={{ marginBottom: 14 }}><Callout><AppText size={12.5}>{g.phase === 'gameover' ? 'Vous étiez spectateur de cette manche : vous jouerez la suivante.' : 'Vous êtes arrivé en cours de manche : vous regardez, et vous jouerez dès la manche suivante.'}</AppText></Callout></View> : null}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
           <View>
             <AppText title size={26}>{`Manche ${g.round}`}</AppText>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 5 }}>
               <Sparkle size={9} color={ART.blood} />
-              <AppText tone="accent" label size={10.8} style={{ letterSpacing: 1.8, textTransform: 'uppercase' }}>{`Salle ${view.code} · ${g.players.length} agents`}</AppText>
+              <AppText tone="accent" label size={10.8} style={{ letterSpacing: 1.8, textTransform: 'uppercase' }}>{`Salle ${view.code} · ${g.players.length} agents${g.spectators.length > 0 ? ` · ${g.spectators.length} ${g.spectators.length > 1 ? 'spectateurs' : 'spectateur'}` : ''}`}</AppText>
             </View>
           </View>
           <Button small variant="ghost" label="Quitter" onPress={() => { leave(); router.replace('/'); }} />
@@ -348,10 +352,12 @@ export function OnlineGame(): React.JSX.Element {
 }
 
 /** Fenêtre de ma carte : à la fermeture, le serveur est prévenu que je l'ai lue. */
-function OnlineSeen({ g, open, origin, onClose }: { g: GameView; open: boolean; origin: ReturnType<typeof takeOrigin>; onClose: () => void }): React.JSX.Element {
+function OnlineSeen({ g, open, origin, onClose }: { g: GameView; open: boolean; origin: ReturnType<typeof takeOrigin>; onClose: () => void }): React.JSX.Element | null {
   const { send } = useOnline();
+  const me = g.me;
+  if (!me) return null; // spectateur : pas de carte
   return (
-    <OnlineCardModal open={open} card={g.me.card} icon={g.me.icon} origin={origin}
-      onClose={() => { onClose(); if (!g.me.viewed) send({ t: 'seen' }); }} />
+    <OnlineCardModal open={open} card={me.card} icon={me.icon} origin={origin}
+      onClose={() => { onClose(); if (!me.viewed) send({ t: 'seen' }); }} />
   );
 }

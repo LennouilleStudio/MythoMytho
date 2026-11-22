@@ -1,9 +1,10 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { INVITE_PARAM, parseInviteCode } from '@/net/invite';
 import { useOnline } from '@/state/online';
 import { RoleFan } from '../ui/RoleFan';
-import { Dossier, AppText, Button, Field, LinkButton } from '../ui/primitives';
+import { Callout, Dossier, AppText, Button, Field, LinkButton } from '../ui/primitives';
 import { Divider } from '../ui/ornaments';
 
 const NAME_KEY = 'mythomytho_online_name';
@@ -12,8 +13,12 @@ const NAME_KEY = 'mythomytho_online_name';
 export function JoinForm(): React.JSX.Element {
   const online = useOnline();
   const router = useRouter();
+  // Lien d'invitation (?salle=ABCD) : le code est déjà rempli, il ne reste qu'à saisir son pseudo.
+  const params = useLocalSearchParams<Record<string, string | string[]>>();
+  const invited = parseInviteCode(params[INVITE_PARAM]);
   const [name, setName] = useState('');
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(invited ?? '');
+  useEffect(() => { if (invited) setCode(invited); }, [invited]);
   const [advanced, setAdvanced] = useState(false);
   const busy = online.status === 'connecting' || online.status === 'reconnecting';
   const cleanCode = code.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 4);
@@ -35,12 +40,13 @@ export function JoinForm(): React.JSX.Element {
         <View style={{ gap: 16 }}>
           <AppText title size={26}>Jouer en ligne</AppText>
           <AppText tone="muted" size={12.5}>Chacun joue sur son propre appareil : le serveur distribue les cartes en secret et ne montre à chacun que la sienne.</AppText>
+          {invited ? <Callout><AppText size={12.5}>{`Vous êtes invité(e) dans la salle ${invited} : choisissez un pseudo, puis touchez « Rejoindre ».`}</AppText></Callout> : null}
           <Field label="Votre pseudo" value={name} onChangeText={setName} maxLength={16} autoCapitalize="words" placeholder="Alice" />
           <Divider />
           <View style={{ gap: 10 }}>
             <AppText label size={11} tone="accent" style={{ letterSpacing: 2, textTransform: 'uppercase' }}>Rejoindre une salle</AppText>
             <Field label="Code à 4 lettres" value={cleanCode} onChangeText={setCode} maxLength={4} autoCapitalize="characters" autoCorrect={false} placeholder="ABCD" />
-            <Button arrow label={busy ? 'Connexion…' : 'Rejoindre'} disabled={busy || !name.trim() || cleanCode.length !== 4} onPress={() => { remember(); online.join(cleanCode, name.trim()); }} />
+            <Button arrow label={busy ? 'Connexion…' : 'Rejoindre'} disabled={busy || !name.trim() || cleanCode.length !== 4} onPress={() => { remember(); router.setParams({ [INVITE_PARAM]: '' }); online.join(cleanCode, name.trim()); }} />
           </View>
           <Divider />
           <Button variant="ghost" label="Créer une salle" disabled={busy || !name.trim()} onPress={() => { remember(); online.create(name.trim()); }} />

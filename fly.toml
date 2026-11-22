@@ -1,0 +1,31 @@
+# Fly.io : `fly launch --no-deploy --copy-config`, puis `fly volumes create mythomytho_data --size 1`, puis `fly deploy`.
+app = "mythomytho"          # à remplacer par un nom unique
+primary_region = "cdg"      # Paris
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  DATA_DIR = "/data"
+
+[mounts]
+  source = "mythomytho_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"   # les salles vivent dans le processus : ne jamais l'endormir
+  auto_start_machines = true
+  min_machines_running = 1     # une seule machine : les salles ne sont pas partagées entre machines
+
+  [[http_service.checks]]
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

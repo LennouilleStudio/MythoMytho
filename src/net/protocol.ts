@@ -1,11 +1,11 @@
-import type { CardView, GameSettings, LieOutcome, MissionOutcome, ScoreEntry, Winner } from '@/domain';
+import type { CardView, GameSettings, LieOutcome, MissionOutcome, ScoreEntry, Winner, WordPair } from '@/domain';
 import type { IconKey } from '@/features/roleMeta';
 
 /**
  * Protocole client ↔ serveur (JSON sur WebSocket). Le serveur est seul maître de la partie : un client envoie des
  * intentions (`ClientMsg`), le serveur les valide (droits, phase) puis renvoie à chacun SA vue filtrée (`PlayerView`).
  */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export type ClientMsg =
   // Connexion (avant d'avoir un siège)
@@ -15,6 +15,10 @@ export type ClientMsg =
   // Salon (hôte)
   | { t: 'settings'; patch: Partial<GameSettings> }
   | { t: 'kick'; seatId: number }
+  /** Passe le rôle d'hôte à un autre joueur connecté. */
+  | { t: 'promote'; seatId: number }
+  /** Paires de mots personnalisées de l'hôte, utilisées par le thème « Mes paires » pour cette salle. */
+  | { t: 'pairs'; pairs: readonly WordPair[] }
   | { t: 'start' }
   // Manche
   | { t: 'seen' }
@@ -58,11 +62,16 @@ export interface ResultPlayer { readonly id: number; readonly name: string; read
 export interface GameView {
   readonly phase: 'reveal' | 'vote' | 'gameover';
   readonly round: number;
+  /** Vrai si je suis arrivé en cours de manche : je regarde, sans carte, et je jouerai à la manche suivante. */
+  readonly spectator: boolean;
+  /** Noms des spectateurs de la manche. */
+  readonly spectators: readonly string[];
   readonly modal: 'none' | 'announce' | 'pick' | 'guess';
   readonly players: readonly PublicPlayer[];
-  /** Ma carte : uniquement la mienne, jamais celle d'un autre. */
-  readonly me: { readonly id: number; readonly card: CardView; readonly icon: IconKey | null; readonly eliminated: boolean; readonly viewed: boolean };
-  readonly timer: { readonly endsAt: number; readonly totalSec: number } | null;
+  /** Ma carte : uniquement la mienne, jamais celle d'un autre. `null` pour un spectateur. */
+  readonly me: null | { readonly id: number; readonly card: CardView; readonly icon: IconKey | null; readonly eliminated: boolean; readonly viewed: boolean };
+  /** `over` : constaté par le serveur (horloge de référence), identique pour tous les joueurs. */
+  readonly timer: { readonly endsAt: number; readonly totalSec: number; readonly over: boolean } | null;
   readonly vote: null | {
     readonly candidates: readonly number[];
     /** Qui a voté (jamais pour qui). */
@@ -101,6 +110,8 @@ export interface PlayerView {
   readonly stage: 'lobby' | 'game';
   readonly seats: readonly SeatView[];
   readonly settings: GameSettings;
+  /** Nombre de paires personnalisées chargées dans la salle (envoyées par l'hôte). */
+  readonly customPairCount: number;
   readonly notices: readonly string[];
   readonly game: GameView | null;
 }

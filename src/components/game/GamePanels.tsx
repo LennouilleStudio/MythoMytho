@@ -50,7 +50,7 @@ export function PlayerCard({ player, index, onPress, faded, struck, stampReady =
   const idle = !faded && !struck;
   const fx = useFeedback();
   const back = backStyle(index);
-  const ref = useRef<View>(null);
+  const ref = useRef<React.ComponentRef<typeof Pressable>>(null);
 
   // Balancement : va-et-vient lent, déphasé d'une carte à l'autre.
   const sway = useRef(new Animated.Value(0)).current;

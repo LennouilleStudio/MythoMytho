@@ -1,0 +1,15 @@
+# Render (https://render.com) : « New + » → « Blueprint » → ce dépôt.
+services:
+  - type: web
+    name: mythomytho
+    runtime: docker
+    plan: starter            # les salles vivent en mémoire : évitez l'offre gratuite, qui met le service en veille
+    healthCheckPath: /health
+    numInstances: 1          # une seule instance : les salles ne sont pas partagées entre serveurs
+    envVars:
+      - key: DATA_DIR
+        value: /data
+    disk:
+      name: mythomytho-data  # conserve les salles d'un redémarrage à l'autre (disque payant sur Render)
+      mountPath: /data
+      sizeGB: 1

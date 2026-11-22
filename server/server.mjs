@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as E from './dist/engine.mjs';
 
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-const MAX_FRAME = 16 * 1024;
+const MAX_FRAME = 64 * 1024; // assez pour les 300 paires personnalisées de l'hôte
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 /* ------------------------------------------------------------------ WebSocket minimal (côté serveur) */
@@ -131,12 +131,65 @@ function serveStatic(root, req, res) {
   return true;
 }
 
+/* ------------------------------------------------------------------ sauvegarde des salles (survivre à un redémarrage) */
+
+const SAVE_VERSION = 1;
+const SAVE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // une sauvegarde plus vieille que ça est ignorée
+
+/** Écrit les salles dans `file` (fichier temporaire puis renommage : jamais de fichier à moitié écrit). Droits 0600 : il contient les jetons de session. */
+function saveRooms(file, rooms, t) {
+  const data = { v: SAVE_VERSION, savedAt: t, rooms: [...rooms.values()].map((e) => ({ room: e.room, idleMs: Math.max(0, t - e.last) })) };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+
+/** Relit les salles : tous les sièges repassent « hors ligne » (les clients se reconnectent avec leur jeton). Fichier absent ou abîmé → aucune salle. */
+function loadRooms(file, t) {
+  let data;
+  try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (err) {
+    if (err && err.code !== 'ENOENT') { try { fs.renameSync(file, `${file}.abime`); } catch { /* tant pis */ } console.error('sauvegarde illisible, ignorée :', err.message); }
+    return [];
+  }
+  if (!data || data.v !== SAVE_VERSION || !Array.isArray(data.rooms) || t - Number(data.savedAt) > SAVE_MAX_AGE_MS) return [];
+  const out = [];
+  for (const item of data.rooms) {
+    const r = item && item.room;
+    if (!r || typeof r.code !== 'string' || !Array.isArray(r.seats) || r.seats.length === 0 || !r.game || !Array.isArray(r.roster)) continue;
+    out.push({ room: { ...r, seats: r.seats.map((s) => ({ ...s, connected: false })) }, last: t - (Number(item.idleMs) || 0) });
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------ serveur de parties */
 
-export function createGameServer({ allowedOrigins = null, now = () => Date.now(), roomTtlMs = 30 * 60 * 1000, staticDir = null } = {}) {
-  /** code → { room, conns: Map<seatId, Set<ws>>, last } */
+export function createGameServer({
+  allowedOrigins = null, now = () => Date.now(), roomTtlMs = 30 * 60 * 1000, staticDir = null,
+  /** Fichier JSON où sauvegarder les salles (null = tout en mémoire). */
+  dataFile = null,
+  /** Délai avant de passer la main si l'hôte est déconnecté (une coupure réseau brève ne doit pas le destituer). 0 = tout de suite. */
+  hostGraceMs = 15000,
+  /** Période de l'horloge de salle (minuteur, passage d'hôte). */
+  tickMs = 1000,
+} = {}) {
+  /** code → { room, conns: Map<seatId, Set<ws>>, last, hostAwaySince } */
   const rooms = new Map();
   const sockets = new Set();
+
+  // Sauvegarde différée : regroupe les rafales de messages en une seule écriture.
+  let saveTimer = null;
+  const flush = () => {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    if (!dataFile) return;
+    try { saveRooms(dataFile, rooms, now()); } catch (err) { console.error('sauvegarde impossible :', err && err.message); }
+  };
+  const dirty = () => { if (dataFile && !saveTimer) { saveTimer = setTimeout(flush, 400); saveTimer.unref?.(); } };
+  if (dataFile) {
+    const t = now();
+    for (const { room, last } of loadRooms(dataFile, t)) rooms.set(room.code, { room, conns: new Map(), last, hostAwaySince: t });
+    if (rooms.size > 0) console.log(`${rooms.size} salle(s) restaurée(s) depuis ${dataFile}`);
+  }
 
   const deps = () => ({
     now: now(), token: () => crypto.randomBytes(16).toString('hex'),
@@ -180,11 +233,12 @@ export function createGameServer({ allowedOrigins = null, now = () => Date.now()
     const set = entry.conns.get(ctx.seatId);
     if (set) { set.delete(ws); if (set.size === 0) entry.conns.delete(ctx.seatId); }
     if (!entry.conns.has(ctx.seatId) && entry.room.seats.some((s) => s.id === ctx.seatId)) {
-      entry.room = E.setConnected(entry.room, ctx.seatId, false);
+      entry.room = E.setConnected(entry.room, ctx.seatId, false, hostGraceMs > 0);
+      if (ctx.seatId === entry.room.hostId && hostGraceMs > 0) entry.hostAwaySince = now();
     }
     entry.last = now();
-    if (entry.room.seats.length === 0) { rooms.delete(ctx.code); return; }
-    broadcast(entry);
+    if (entry.room.seats.length === 0) { rooms.delete(ctx.code); dirty(); return; }
+    broadcast(entry); dirty();
   }
 
   function onMessage(ws, text) {
@@ -209,9 +263,10 @@ export function createGameServer({ allowedOrigins = null, now = () => Date.now()
       if (msg.t === 'create') {
         const code = newCode();
         const made = E.createRoom(code, msg.name, deps());
-        const entry = { room: made.room, conns: new Map(), last: now() };
+        const entry = { room: made.room, conns: new Map(), last: now(), hostAwaySince: null };
         rooms.set(code, entry);
         attach(entry, made.seatId, ws, made.token);
+        dirty();
         return broadcast(entry);
       }
       if (msg.t === 'join' || msg.t === 'rejoin') {
@@ -220,14 +275,17 @@ export function createGameServer({ allowedOrigins = null, now = () => Date.now()
         if (msg.t === 'rejoin') {
           const seat = E.findSeatByToken(entry.room, String(msg.token ?? ''));
           if (!seat) return send(ws, { t: 'error', message: 'Session expirée : rejoignez la salle avec son code.' });
-          entry.room = E.setConnected(entry.room, seat.id, true);
+          entry.room = E.setConnected(entry.room, seat.id, true, hostGraceMs > 0);
+          if (seat.id === entry.room.hostId) entry.hostAwaySince = null;
           attach(entry, seat.id, ws, seat.token);
+          dirty();
           return broadcast(entry);
         }
         const res = E.joinRoom(entry.room, msg.name, deps());
         if ('error' in res) return send(ws, { t: 'error', message: res.error });
         entry.room = res.room;
         attach(entry, res.seatId, ws, res.token);
+        dirty();
         return broadcast(entry);
       }
       return send(ws, { t: 'error', message: 'Rejoignez d\'abord une salle.' });
@@ -247,9 +305,30 @@ export function createGameServer({ allowedOrigins = null, now = () => Date.now()
       for (const sock of set) { if (msg.t === 'kick') send(sock, { t: 'error', message: 'L\'hôte vous a retiré du salon.' }); sock.ctx = null; }
       entry.conns.delete(sid);
     }
-    if (entry.room.seats.length === 0) { rooms.delete(entry.room.code); return; }
-    broadcast(entry);
+    if (entry.room.seats.length === 0) { rooms.delete(entry.room.code); dirty(); return; }
+    broadcast(entry); dirty();
   }
+
+  /**
+   * Horloge des salles : fin de minuteur constatée par le serveur, et passage d'hôte quand l'hôte est absent depuis plus de `hostGraceMs`.
+   * Exposée pour les tests (horloge injectée) ; appelée chaque seconde en service.
+   */
+  function tickRooms() {
+    const t = now();
+    let changed = false;
+    for (const entry of rooms.values()) {
+      let next = E.tick(entry.room, t);
+      const hostSeat = next.seats.find((s) => s.id === next.hostId);
+      if (hostSeat && !hostSeat.connected) {
+        entry.hostAwaySince ??= t;
+        if (t - entry.hostAwaySince >= hostGraceMs) { next = E.electHost(next); entry.hostAwaySince = null; }
+      } else entry.hostAwaySince = null;
+      if (next !== entry.room) { entry.room = next; broadcast(entry); changed = true; }
+    }
+    if (changed) dirty();
+  }
+  const clock = setInterval(tickRooms, tickMs);
+  clock.unref?.();
 
   const server = http.createServer((req, res) => {
     if (req.url === '/health') { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ ok: true, rooms: rooms.size })); }
@@ -259,7 +338,9 @@ export function createGameServer({ allowedOrigins = null, now = () => Date.now()
   });
   server.on('upgrade', (req, socket) => {
     const origin = req.headers.origin;
-    if (allowedOrigins && (!origin || !allowedOrigins.includes(origin))) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); return; }
+    // Liste blanche d'origines ; la page servie par ce même serveur (origine = Host de la requête) est toujours acceptée.
+    const sameOrigin = (() => { try { return !!origin && new URL(origin).host === req.headers.host; } catch { return false; } })();
+    if (allowedOrigins && !sameOrigin && (!origin || !allowedOrigins.includes(origin))) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); return; }
     const ws = acceptWebSocket(req, socket, {
       message: onMessage,
       close: (sock) => { sockets.delete(sock); detach(sock); },
@@ -271,14 +352,16 @@ export function createGameServer({ allowedOrigins = null, now = () => Date.now()
   const beat = setInterval(() => {
     for (const ws of sockets) { if (!ws.alive) { ws.terminate(); continue; } ws.alive = false; ws.ping(); }
     const t = now();
-    for (const [code, entry] of rooms) if (entry.conns.size === 0 && t - entry.last > roomTtlMs) rooms.delete(code);
+    let purged = false;
+    for (const [code, entry] of rooms) if (entry.conns.size === 0 && t - entry.last > roomTtlMs) { rooms.delete(code); purged = true; }
+    if (purged) dirty();
   }, 20000);
   beat.unref?.();
 
   return {
-    server, rooms,
+    server, rooms, tick: tickRooms, flush,
     listen: (port = 0, host = '0.0.0.0') => new Promise((resolve) => server.listen(port, host, () => resolve(server.address().port))),
-    close: () => new Promise((resolve) => { clearInterval(beat); for (const ws of sockets) ws.terminate(); server.close(() => resolve()); }),
+    close: () => new Promise((resolve) => { clearInterval(beat); clearInterval(clock); flush(); for (const ws of sockets) ws.terminate(); server.close(() => resolve()); }),
   };
 }
 
@@ -287,7 +370,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const staticDir = process.env.STATIC_DIR ?? path.join(here, '..', 'dist');
   const hasApp = fs.existsSync(path.join(staticDir, 'index.html'));
-  const srv = createGameServer({ allowedOrigins: origins, staticDir: hasApp ? staticDir : null });
+  const dataDir = process.env.DATA_DIR;
+  const srv = createGameServer({ allowedOrigins: origins, staticDir: hasApp ? staticDir : null, dataFile: dataDir ? path.join(dataDir, 'rooms.json') : null });
   const port = await srv.listen(Number(process.env.PORT ?? 8787));
-  console.log(`MythoMytho — serveur de parties sur le port ${port}${origins ? ` (origines : ${origins.join(', ')})` : ''} — ${hasApp ? `application servie depuis ${staticDir}` : 'application absente (lancez « npm run build:web »)'}`);
+  // Arrêt propre (Docker, Render, Fly envoient SIGTERM) : dernière sauvegarde puis sortie.
+  for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { srv.flush(); process.exit(0); });
+  console.log(`MythoMytho — serveur de parties sur le port ${port}${origins ? ` (origines : ${origins.join(', ')})` : ''} — ${dataDir ? `salles sauvegardées dans ${dataDir}` : 'salles en mémoire seulement (DATA_DIR pour les sauvegarder)'} — ${hasApp ? `application servie depuis ${staticDir}` : 'application absente (lancez « npm run build:web »)'}`);
 }

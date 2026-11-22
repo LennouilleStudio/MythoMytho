@@ -80,6 +80,29 @@ qui sert **les pages (avec repli sur `index.html`, donc `/local` fonctionne en a
 Sur le web en production, l'application se connecte à sa propre origine (`wss://votre-domaine`) : aucun réglage d'adresse n'est nécessaire.
 `STATIC_DIR=…` change le dossier servi. Tests : `npm run test:server` (parties WebSocket + service des pages).
 
+## Jouer en ligne : ce qui est inclus
+
+- **Lien et QR code** : le salon affiche un code QR et un lien `/?salle=ABCD` ; l'invité n'a plus qu'à saisir son pseudo.
+- **Spectateurs** : on peut rejoindre une salle en pleine manche. Le nouvel arrivant regarde, sans carte ni mot, et joue dès la manche suivante. Les joueurs absents ne bloquent ni les cartes ni le vote et ne sont pas relancés dans la manche suivante ; à leur retour ils regardent, puis rejouent.
+- **« Mes paires »** : l'hôte envoie ses paires personnalisées au salon (nettoyées et plafonnées à 300 par le serveur) ; le thème est ensuite tirable comme les autres.
+- **Minuteur** : la fin du temps est constatée par le serveur et annoncée à tous en même temps. Si l'hôte est absent à ce moment, le vote s'ouvre tout seul.
+- **Hôte** : « Nommer hôte » (dans le salon) passe la main. Un hôte déconnecté garde son rôle 15 s (une coupure réseau brève ne le destitue pas), puis le premier joueur connecté le remplace.
+- **Sauvegarde** : avec `DATA_DIR=/chemin`, les salles sont écrites dans `rooms.json` (droits 0600, jetons de session inclus) et reprises au redémarrage ; les clients se reconnectent seuls. Sans `DATA_DIR`, tout reste en mémoire.
+
+Variables du serveur : `PORT` (8787), `DATA_DIR`, `STATIC_DIR` (dossier de l'application, `dist/` par défaut), `ALLOWED_ORIGINS` (liste d'origines autorisées ; la page servie par le serveur lui-même est toujours acceptée).
+
+## Déploiement
+
+Un conteneur suffit : il sert l'application et le jeu en ligne sur le même port, derrière HTTPS si l'hébergeur le fournit (l'application utilise alors `wss://` toute seule).
+
+```bash
+docker build -t mythomytho .
+docker run -p 8080:8080 -v mythomytho-data:/data mythomytho     # http://localhost:8080
+```
+
+- **Render** : `render.yaml` (Blueprint). **Fly.io** : `fly.toml` (voir ses premières lignes). Dans les deux cas : **une seule instance** (les salles ne sont pas partagées entre serveurs) et un volume sur `/data` pour la sauvegarde.
+- Ces fichiers n'ont pas pu être exécutés lors de leur écriture : à valider avec un premier déploiement.
+
 ## Jouer en ligne (serveur autoritaire)
 
 Chaque joueur joue sur son propre appareil. Un petit serveur Node tient la partie ; les téléphones ne font qu'envoyer des intentions
