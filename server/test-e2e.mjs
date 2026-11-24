@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { createGameServer } from './server.mjs';
 
-const srv = createGameServer({ hostGraceMs: 0 }); // passage d'hôte immédiat dans ce test (le délai de grâce a son propre test)
+const srv = createGameServer({ hostGraceMs: 0, logger: { level: 'silent' } }); // passage d'hôte immédiat dans ce test (le délai de grâce a son propre test)
 const port = await srv.listen(0, '127.0.0.1');
 const URL_WS = `ws://127.0.0.1:${port}`;
 let checks = 0;

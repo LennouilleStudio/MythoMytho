@@ -1,4 +1,4 @@
-import type { ClientMsg, PlayerView, ServerMsg } from '@/net/protocol';
+import type { ClientMsg, PlayerView, RoomEvent, ServerMsg } from '@/net/protocol';
 
 export type ConnStatus = 'idle' | 'connecting' | 'online' | 'reconnecting';
 export interface Session { readonly url: string; readonly code: string; readonly token: string }
@@ -7,6 +7,12 @@ export interface ClientEvents {
   onView(view: PlayerView): void;
   onStatus(status: ConnStatus): void;
   onError(message: string): void;
+  /** Code lisible de la dernière erreur (mot de passe requis, salle verrouillée, banni…), juste avant `onError`. */
+  onErrorCode?(code: string | null): void;
+  /** Réaction ou message de chat (événements éphémères). */
+  onEvent?(event: RoomEvent): void;
+  /** Historique du chat envoyé à la (re)connexion. */
+  onChatlog?(items: readonly RoomEvent[]): void;
   /** `null` : la session n'est plus valable (salle fermée, jeton expiré, départ volontaire). */
   onSession(session: Session | null): void;
 }
@@ -66,9 +72,15 @@ export class GameClient {
         this.ev.onStatus('online');
       } else if (m.t === 'view') {
         this.ev.onView(m.view);
+      } else if (m.t === 'event') {
+        this.ev.onEvent?.(m.event);
+      } else if (m.t === 'chatlog') {
+        this.ev.onChatlog?.(m.items);
       } else if (m.t === 'error') {
-        // Reprise impossible (salle disparue, jeton refusé) : inutile de réessayer.
-        if (/expirée|introuvable|n'existe plus|retiré/i.test(m.message)) { this.ev.onError(m.message); this.dispose(true); return; }
+        this.ev.onErrorCode?.(m.code ?? null);
+        // Avant d'avoir un siège, toute erreur est définitive (salle introuvable, mot de passe, verrou, bannissement…) ; en cours de partie,
+        // seules la reprise impossible (salle disparue, jeton refusé) ou le renvoi mettent fin à la session.
+        if (!this.session || m.code === 'banned' || /expirée|introuvable|n'existe plus|retiré|banni/i.test(m.message)) { this.ev.onError(m.message); this.dispose(true); return; }
         this.ev.onError(m.message);
       }
     };

@@ -8,6 +8,8 @@ primary_region = "cdg"      # Paris
 [env]
   PORT = "8080"
   DATA_DIR = "/data"
+  TRUST_PROXY = "1"   # Fly place un proxy devant la machine : indispensable pour les limites par adresse
+  # ADMIN_TOKEN : à définir avec `fly secrets set ADMIN_TOKEN=...` (ouvre /stats et /metrics)
 
 [mounts]
   source = "mythomytho_data"

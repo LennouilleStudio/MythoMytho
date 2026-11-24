@@ -22,7 +22,9 @@ import { bleed, bleedReset } from '../ui/bleed';
 import { takeOrigin } from '../ui/cardOrigin';
 import { DashLine, Frame, Plaque, Sparkle } from '../ui/ornaments';
 import { AppText, Button, Callout, Field, Panel } from '../ui/primitives';
+import { HistoryPanel } from './History';
 import { OnlineCardModal } from './OnlineCard';
+import { SocialDock } from './Social';
 
 /* ----------------------------------------------------------------- petits éléments */
 
@@ -106,10 +108,28 @@ function RevealPhase({ view, g, onOpenCard }: { view: PlayerView; g: GameView; o
       <View style={{ gap: 12 }}>
         <AppText tone="muted" size={11.5}>{`${seen}/${g.players.length} cartes lues`}</AppText>
         {view.isHost
-          ? <Button arrow label="Lancer le vote" disabled={!all} onPress={() => send({ t: 'startVote' })} />
+          ? (
+            <>
+              <Button arrow label="Lancer le vote" disabled={!all} onPress={() => send({ t: 'startVote' })} />
+              {all ? null : <Button variant="ghost" label="Ouvrir le vote sans attendre les cartes non lues" onPress={() => send({ t: 'startVote', force: true })} />}
+            </>
+          )
           : all ? <Waiting>Tout le monde a lu sa carte : en attente du lancement du vote par l'hôte.</Waiting> : null}
       </View>
     </View>
+  );
+}
+
+/** Compte à rebours du vote, sur l'horloge du serveur. */
+function VoteCountdown({ endsAt }: { endsAt: number }): React.JSX.Element {
+  const { serverNow } = useOnline();
+  const [, tick] = useState(0);
+  useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 250); return () => clearInterval(id); }, []);
+  const left = Math.max(0, Math.ceil((endsAt - serverNow()) / 1000));
+  return (
+    <AppText bold size={13} tone={left <= 10 ? 'accent' : 'muted'}>
+      {left > 0 ? `Temps pour voter : ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'Temps écoulé : dépouillement…'}
+    </AppText>
   );
 }
 
@@ -127,6 +147,7 @@ function VotePhase({ view, g }: { view: PlayerView; g: GameView }): React.JSX.El
           {v?.canVote ? 'Chacun vote en secret pour le joueur à éliminer : touchez sa carte. Vous pouvez changer d\'avis tant que tout le monde n\'a pas voté.' : g.spectator ? 'Vous regardez la manche en spectateur : vous votez à partir de la suivante.' : 'Vous êtes éliminé(e) : vous suivez le vote sans y participer.'}
         </AppText>
       </Callout>
+      {v?.endsAt ? <View style={{ marginTop: 12 }}><VoteCountdown endsAt={v.endsAt} /></View> : null}
       {v?.note ? <View style={{ marginTop: 12 }}><Callout tone="ok"><AppText size={12.5}>{v.note}</AppText></Callout></View> : null}
       <View style={{ height: 18 }} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 26, paddingTop: 4 }}>
@@ -140,7 +161,7 @@ function VotePhase({ view, g }: { view: PlayerView; g: GameView }): React.JSX.El
             <View key={p.id} style={{ alignItems: 'center', gap: 6 }}>
               <PlayerCard player={p} index={p.id} struck={p.eliminated} stampReady={stamped} faded={!p.eliminated && !isCandidate}
                 caption={p.eliminated ? 'éliminé' : canPick ? 'voter' : undefined} onPress={canPick ? () => send({ t: 'vote', target: p.id }) : undefined} />
-              {votedFor ? <Plaque label="Votre vote" tone="blood" size={9.5} /> : <Caption tone={hasVoted ? 'accent' : 'muted'}>{p.eliminated ? 'Éliminé' : mine ? 'Vous' : hasVoted ? 'A voté ✓' : p.connected ? '…' : 'Hors ligne'}</Caption>}
+              {votedFor ? <Plaque label="Votre vote" tone="blood" size={9.5} /> : <Caption tone={hasVoted ? 'accent' : 'muted'}>{p.eliminated ? 'Éliminé' : mine ? 'Vous' : hasVoted ? 'A voté ✓' : p.idle ? 'Inactif' : p.connected ? '…' : 'Hors ligne'}</Caption>}
             </View>
           );
         })}
@@ -220,8 +241,14 @@ function GameOverPhase({ view, g }: { view: PlayerView; g: GameView }): React.JS
       ) : null}
       <View style={{ gap: 12 }}>
         {view.isHost
-          ? <Button arrow label="Nouvelle manche" onPress={() => send({ t: 'nextRound' })} />
-          : <Text style={{ color: colors.muted, fontFamily: fonts.body, fontSize: 12.5 }}>L'hôte lance la manche suivante.</Text>}
+          ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+              <Button arrow label="Manche suivante" onPress={() => send({ t: 'nextRound' })} />
+              <Button variant="ghost" label="Revanche" onPress={() => send({ t: 'rematch' })} />
+            </View>
+          )
+          : <Text style={{ color: colors.muted, fontFamily: fonts.body, fontSize: 12.5 }}>L'hôte lance la manche suivante ou une revanche.</Text>}
+        <HistoryPanel history={view.history} />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           <Button variant="ghost" label="Partager le résumé" onPress={share} />
           {view.isHost ? <Button variant="ghost" label="Retour au salon" onPress={() => send({ t: 'toLobby' })} /> : null}
@@ -343,6 +370,8 @@ export function OnlineGame(): React.JSX.Element {
         {g.phase === 'reveal' ? <RevealPhase view={view} g={g} onOpenCard={openCard} /> : null}
         {g.phase === 'vote' ? <VotePhase view={view} g={g} /> : null}
         {g.phase === 'gameover' ? <GameOverPhase view={view} g={g} /> : null}
+
+        <View style={{ marginTop: 26 }}><SocialDock /></View>
       </Page>
       <OnlineSeen g={g} open={cardOpen} origin={origin} onClose={closeCard} />
       <Prompts view={view} g={g} />

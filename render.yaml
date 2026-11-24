@@ -9,6 +9,10 @@ services:
     envVars:
       - key: DATA_DIR
         value: /data
+      - key: TRUST_PROXY       # Render place un proxy devant le service : indispensable pour les limites par adresse
+        value: "1"
+      - key: ADMIN_TOKEN       # ouvre /stats et /metrics ; à renseigner dans le tableau de bord (jamais dans ce fichier)
+        sync: false
     disk:
       name: mythomytho-data  # conserve les salles d'un redémarrage à l'autre (disque payant sur Render)
       mountPath: /data

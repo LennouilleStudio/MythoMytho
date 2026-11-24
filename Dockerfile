@@ -13,8 +13,8 @@ FROM node:22-slim
 WORKDIR /app
 ENV NODE_ENV=production PORT=8080 DATA_DIR=/data
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/server/server.mjs ./server/server.mjs
-COPY --from=build /app/server/dist ./server/dist
+# Le serveur (server.mjs et ses modules) et le moteur compilé (server/dist/engine.mjs).
+COPY --from=build /app/server ./server
 # Salles sauvegardées dans /data : montez-y un volume pour qu'elles survivent aux redéploiements.
 RUN mkdir -p /data && chown node:node /data
 USER node

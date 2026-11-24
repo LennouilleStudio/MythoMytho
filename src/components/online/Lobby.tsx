@@ -16,13 +16,15 @@ import { RolesCard, type RoleInfo } from '../dashboard/RolesCard';
 import { ThemesCard } from '../dashboard/ThemesCard';
 import { useSummaryPills } from '../dashboard/SummaryCard';
 import { PlayerCard } from '../game/GamePanels';
+import { RoomOptions } from './RoomOptions';
+import { SocialDock } from './Social';
 import { QrCode } from '../ui/QrCode';
 import { Plaque } from '../ui/ornaments';
-import { AppText, Button, Pill } from '../ui/primitives';
+import { AppText, Button, Pill, Toggle } from '../ui/primitives';
 
 /** Salon : code à partager, joueurs présents ; l'hôte règle la partie avec les mêmes cartes que le mode local. */
 export function Lobby(): React.JSX.Element {
-  const { view, send, leave, serverUrl } = useOnline();
+  const { view, send, leave, serverUrl, pushAvailable, pushOn, setPushOn } = useOnline();
   const { customPairs } = useLibrary();
   const { colors } = useTheme();
   const toast = useToast();
@@ -87,7 +89,7 @@ export function Lobby(): React.JSX.Element {
         </View>
       </DashCard>
 
-      <DashCard title={`${count} ${plural(count, 'joueur', 'joueurs')}`} hint={isHost ? `Il faut au moins ${MIN_PLAYERS} joueurs connectés. « Nommer hôte » passe la main ; « Retirer » renvoie quelqu'un.` : 'En attente du lancement par l\'hôte.'}>
+      <DashCard title={`${count} ${plural(count, 'joueur', 'joueurs')}`} hint={isHost ? `Il faut au moins ${MIN_PLAYERS} joueurs connectés. « Nommer hôte » passe la main ; « Retirer » renvoie quelqu'un ; « Bannir » l'empêche de revenir.` : 'En attente du lancement par l\'hôte.'}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, paddingTop: 6 }}>
           {v.seats.map((s, i) => (
             <View key={s.id} style={{ alignItems: 'center', gap: 8, width: 120 }}>
@@ -98,12 +100,15 @@ export function Lobby(): React.JSX.Element {
                 <View style={{ gap: 6, alignItems: 'center' }}>
                   {s.connected ? <Button small variant="ghost" label="Nommer hôte" onPress={() => send({ t: 'promote', seatId: s.id })} /> : null}
                   <Button small variant="ghost" label="Retirer" onPress={() => send({ t: 'kick', seatId: s.id })} />
+                  <Button small variant="ghost" label="Bannir" onPress={() => send({ t: 'ban', seatId: s.id })} />
                 </View>
               ) : null}
             </View>
           ))}
         </View>
       </DashCard>
+
+      <RoomOptions />
 
       {isHost ? (
         <>
@@ -117,6 +122,10 @@ export function Lobby(): React.JSX.Element {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{pills.map((p) => <Pill key={p} label={p} />)}</View>
         </DashCard>
       )}
+
+      <SocialDock />
+
+      {pushAvailable ? <Toggle label="Me prévenir par notification" desc="Quand la manche commence, que le vote s'ouvre ou que la manche se termine alors que l'appli est fermée." value={pushOn} onChange={setPushOn} /> : null}
 
       <View style={{ gap: 12 }}>
         {isHost ? <Button arrow label="Lancer la manche" disabled={count < MIN_PLAYERS} onPress={() => send({ t: 'start' })} /> : null}

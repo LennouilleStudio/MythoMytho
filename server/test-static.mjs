@@ -14,7 +14,7 @@ fs.writeFileSync(path.join(dir, 'sw.js'), '// sw');
 fs.writeFileSync(path.join(dir, '_expo', 'static', 'js', 'entry-abc.js'), 'console.log(1)');
 fs.writeFileSync(path.join(os.tmpdir(), 'mm-secret.txt'), 'secret');
 
-const srv = createGameServer({ staticDir: dir });
+const srv = createGameServer({ staticDir: dir, logger: { level: 'silent' } });
 const port = await srv.listen(0, '127.0.0.1');
 const get = (p, method = 'GET') => new Promise((resolve, reject) => {
   const req = http.request({ host: '127.0.0.1', port, path: p, method }, (res) => {

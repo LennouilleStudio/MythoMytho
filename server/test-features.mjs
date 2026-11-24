@@ -238,7 +238,7 @@ const now = () => clock;
 
 // ---- délai de grâce de l'hôte (horloge injectée)
 {
-  const srv = createGameServer({ now, hostGraceMs: 5000, tickMs: 3_600_000 });
+  const srv = createGameServer({ now, hostGraceMs: 5000, tickMs: 3_600_000, logger: { level: 'silent' } });
   const port = await srv.listen(0, '127.0.0.1');
   const url = `ws://127.0.0.1:${port}`;
   const { host, guests } = await room(url, 3);
@@ -265,7 +265,7 @@ const now = () => clock;
 
 // ---- minuteur : l'échéance est annoncée par le serveur à tous les clients
 {
-  const srv = createGameServer({ now, tickMs: 3_600_000 });
+  const srv = createGameServer({ now, tickMs: 3_600_000, logger: { level: 'silent' } });
   const port = await srv.listen(0, '127.0.0.1');
   const { host, guests, all } = await room(`ws://127.0.0.1:${port}`, 4);
   host.send({ t: 'settings', patch: { timerEnabled: true, timerDurationMin: 1 } });
@@ -298,7 +298,7 @@ const now = () => clock;
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mm-save-'));
   const file = path.join(dir, 'sub', 'rooms.json');
-  const a = createGameServer({ now, dataFile: file, hostGraceMs: 2000, tickMs: 3_600_000 });
+  const a = createGameServer({ now, dataFile: file, hostGraceMs: 2000, tickMs: 3_600_000, logger: { level: 'silent' } });
   const portA = await a.listen(0, '127.0.0.1');
   const { host, guests, all } = await room(`ws://127.0.0.1:${portA}`, 4);
   host.send({ t: 'start' });
@@ -316,7 +316,7 @@ const now = () => clock;
 
   // « redémarrage » : un nouveau serveur relit le fichier
   clock += 3000;
-  const b = createGameServer({ now, dataFile: file, hostGraceMs: 2000, tickMs: 3_600_000 });
+  const b = createGameServer({ now, dataFile: file, hostGraceMs: 2000, tickMs: 3_600_000, logger: { level: 'silent' } });
   const portB = await b.listen(0, '127.0.0.1');
   ok(b.rooms.has(code), 'la salle est restaurée');
   ok([...b.rooms.get(code).room.seats].every((s) => !s.connected), 'tous les sièges repartent « hors ligne »');
@@ -357,7 +357,7 @@ const now = () => clock;
 
 // ---- origine : la page servie par le serveur lui-même est toujours acceptée
 {
-  const srv = createGameServer({ allowedOrigins: ['https://autorise.example'], tickMs: 3_600_000 });
+  const srv = createGameServer({ allowedOrigins: ['https://autorise.example'], tickMs: 3_600_000, logger: { level: 'silent' } });
   const port = await srv.listen(0, '127.0.0.1');
   const tryUpgrade = (origin) => new Promise((resolve) => {
     const req = http.request({ host: '127.0.0.1', port, path: '/', headers: { Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13', 'Sec-WebSocket-Key': crypto.randomBytes(16).toString('base64'), ...(origin ? { Origin: origin } : {}) } });

@@ -1,8 +1,11 @@
 // Serveur de parties MythoMytho : HTTP + WebSocket (RFC 6455) sans aucune dépendance.
 // Le serveur est le seul maître de la partie : il exécute le moteur de salle (src/net, même code que l'application),
 // valide chaque intention d'un joueur et ne lui renvoie que SA vue filtrée.
+// Autour du moteur : limites anti-abus (limits.mjs), comptes et classement (accounts.mjs), notifications push (push.mjs),
+// journaux et statistiques (metrics.mjs), sauvegarde des salles (DATA_DIR), service de l'application web exportée.
 //
-//   node server/build.mjs && node server/server.mjs        (PORT=8787 par défaut ; ALLOWED_ORIGINS=https://a.fr,https://b.fr)
+//   node server/build.mjs && node server/server.mjs        (PORT=8787 par défaut ; ALLOWED_ORIGINS=https://a.fr,https://b.fr ;
+//                                                          DATA_DIR, TRUST_PROXY, ADMIN_TOKEN, LOG_LEVEL : voir le README)
 // Il sert aussi l'application web exportée (`expo export -p web` → dist/, ou STATIC_DIR=…) : un seul processus pour /, /local et le jeu en ligne.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -10,6 +13,10 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as E from './dist/engine.mjs';
+import { createAccounts } from './accounts.mjs';
+import { clientIp, createLimiter } from './limits.mjs';
+import { createMetrics } from './metrics.mjs';
+import { PUSH_TOKEN, createPusher } from './push.mjs';
 
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const MAX_FRAME = 64 * 1024; // assez pour les 300 paires personnalisées de l'hôte
@@ -133,19 +140,24 @@ function serveStatic(root, req, res) {
 
 /* ------------------------------------------------------------------ sauvegarde des salles (survivre à un redémarrage) */
 
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 const SAVE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // une sauvegarde plus vieille que ça est ignorée
 
 /** Écrit les salles dans `file` (fichier temporaire puis renommage : jamais de fichier à moitié écrit). Droits 0600 : il contient les jetons de session. */
 function saveRooms(file, rooms, t) {
-  const data = { v: SAVE_VERSION, savedAt: t, rooms: [...rooms.values()].map((e) => ({ room: e.room, idleMs: Math.max(0, t - e.last) })) };
+  const data = {
+    v: SAVE_VERSION, savedAt: t,
+    rooms: [...rooms.values()].map((e) => ({
+      room: e.room, idleMs: Math.max(0, t - e.last), pw: e.pw, bannedIps: [...e.bannedIps], push: [...e.push], statsKey: e.statsKey,
+    })),
+  };
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 });
   fs.renameSync(tmp, file);
 }
 
-/** Relit les salles : tous les sièges repassent « hors ligne » (les clients se reconnectent avec leur jeton). Fichier absent ou abîmé → aucune salle. */
+/** Relit les salles : tous les sièges repassent « hors ligne » (les clients se reconnectent avec leur jeton). Fichier absent, abîmé ou d'une autre version → aucune salle. */
 function loadRooms(file, t) {
   let data;
   try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (err) {
@@ -157,38 +169,120 @@ function loadRooms(file, t) {
   for (const item of data.rooms) {
     const r = item && item.room;
     if (!r || typeof r.code !== 'string' || !Array.isArray(r.seats) || r.seats.length === 0 || !r.game || !Array.isArray(r.roster)) continue;
-    out.push({ room: { ...r, seats: r.seats.map((s) => ({ ...s, connected: false })) }, last: t - (Number(item.idleMs) || 0) });
+    out.push({
+      room: { ...r, seats: r.seats.map((s) => ({ ...s, connected: false })) }, last: t - (Number(item.idleMs) || 0),
+      pw: item.pw && typeof item.pw.hash === 'string' && typeof item.pw.salt === 'string' ? item.pw : null,
+      bannedIps: Array.isArray(item.bannedIps) ? item.bannedIps.filter((x) => typeof x === 'string') : [],
+      push: Array.isArray(item.push) ? item.push.filter((p) => Array.isArray(p) && Number.isInteger(p[0]) && PUSH_TOKEN.test(String(p[1]))) : [],
+      statsKey: Number.isFinite(item.statsKey) ? item.statsKey : null,
+    });
   }
   return out;
 }
 
+/* ------------------------------------------------------------------ mots de passe de salle */
+
+const roomPwHash = (pw, salt) => crypto.createHmac('sha256', salt).update(pw).digest('hex');
+const cleanPw = (raw) => (typeof raw === 'string' ? raw.trim().slice(0, 64) : '');
+
+function setRoomPassword(entry, raw) {
+  const pw = cleanPw(raw);
+  if (!pw) { entry.pw = null; return; }
+  const salt = crypto.randomBytes(8).toString('hex');
+  entry.pw = { salt, hash: roomPwHash(pw, salt) };
+}
+
+function roomPasswordOk(entry, raw) {
+  if (!entry.pw) return true;
+  const h = Buffer.from(roomPwHash(cleanPw(raw), entry.pw.salt), 'hex');
+  const ref = Buffer.from(entry.pw.hash, 'hex');
+  return h.length === ref.length && crypto.timingSafeEqual(h, ref);
+}
+
+const safeEqualText = (a, b) => {
+  const x = crypto.createHash('sha256').update(String(a)).digest(); const y = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(x, y);
+};
+
 /* ------------------------------------------------------------------ serveur de parties */
+
+const LIMIT_DEFAULTS = {
+  connsPerIp: 40,        // connexions WebSocket simultanées par adresse (une classe derrière une box = une adresse)
+  connsPerMin: 120,      // nouvelles connexions par minute et par adresse
+  roomsPer10Min: 10,     // salles créées par adresse
+  joinsPerMin: 40,       // tentatives de rejoindre (code, mot de passe) par adresse : freine l'essai de tous les codes
+  passwordTriesPerMin: 8,// essais de mot de passe par adresse et par salle
+  apiPerMin: 90, loginPerMin: 10, registerPerHour: 5,
+  maxRooms: 5000,        // plafond global : au-delà, « serveur complet »
+  msgPer5s: 40,          // messages par connexion
+  chatPer10s: 6, reactPer10s: 12,
+  maxMessage: 2048,      // octets d'un message (hors paires personnalisées)
+};
 
 export function createGameServer({
   allowedOrigins = null, now = () => Date.now(), roomTtlMs = 30 * 60 * 1000, staticDir = null,
   /** Fichier JSON où sauvegarder les salles (null = tout en mémoire). */
   dataFile = null,
+  /** Fichier des comptes (null = en mémoire : perdus au redémarrage). */
+  accountsFile = null,
   /** Délai avant de passer la main si l'hôte est déconnecté (une coupure réseau brève ne doit pas le destituer). 0 = tout de suite. */
   hostGraceMs = 15000,
   /** Période de l'horloge de salle (minuteur, passage d'hôte). */
   tickMs = 1000,
+  /** Nombre de proxys de confiance devant le serveur (0 = aucun : on lit l'adresse de la connexion). */
+  trustProxyHops = 0,
+  /** Jeton qui ouvre /stats et /metrics (absent = ces pages n'existent pas). */
+  adminToken = null,
+  limits = {},
+  /** Remplace `fetch` pour les notifications (tests). */
+  pushFetch = undefined,
+  /** { level: 'debug'|'info'|'warn'|'error'|'silent', sink: (ligne, niveau) => void } */
+  logger = {},
 } = {}) {
-  /** code → { room, conns: Map<seatId, Set<ws>>, last, hostAwaySince } */
+  const L = { ...LIMIT_DEFAULTS, ...limits };
+  const metrics = createMetrics({ now, ...logger });
+  const log = metrics.log;
+  const accounts = createAccounts({ file: accountsFile, now });
+  const pusher = createPusher({
+    fetchImpl: pushFetch === undefined ? globalThis.fetch : pushFetch, now,
+    onResult: (r) => { metrics.inc('push_sent', r.sent); metrics.inc('push_failed', r.failed); if (r.error) log('warn', 'push_error', { error: r.error }); },
+  });
+  const lim = {
+    conns: createLimiter({ max: L.connsPerMin, windowMs: 60000, now }),
+    rooms: createLimiter({ max: L.roomsPer10Min, windowMs: 600000, now }),
+    joins: createLimiter({ max: L.joinsPerMin, windowMs: 60000, now }),
+    pw: createLimiter({ max: L.passwordTriesPerMin, windowMs: 60000, now }),
+    api: createLimiter({ max: L.apiPerMin, windowMs: 60000, now }),
+    login: createLimiter({ max: L.loginPerMin, windowMs: 60000, now }),
+    register: createLimiter({ max: L.registerPerHour, windowMs: 3600000, now }),
+  };
+  const ipConns = new Map();
+
+  /** code → { room, conns: Map<seatId, Set<ws>>, last, hostAwaySince, pw, bannedIps: Set, push: Map<seatId, jeton>, chat: [], statsKey, snap } */
   const rooms = new Map();
   const sockets = new Set();
+
+  const snapOf = (room) => ({ games: room.games, phase: room.game.active ? room.game.phase : 'lobby', voteKey: room.voteKey });
+  const makeEntry = (room, extra = {}) => ({
+    room, conns: new Map(), last: now(), hostAwaySince: null, pw: null, bannedIps: new Set(), push: new Map(), chat: [], statsKey: null,
+    snap: snapOf(room), ...extra,
+  });
 
   // Sauvegarde différée : regroupe les rafales de messages en une seule écriture.
   let saveTimer = null;
   const flush = () => {
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    accounts.flush();
     if (!dataFile) return;
-    try { saveRooms(dataFile, rooms, now()); } catch (err) { console.error('sauvegarde impossible :', err && err.message); }
+    try { saveRooms(dataFile, rooms, now()); } catch (err) { log('error', 'save_failed', { error: String(err && err.message) }); }
   };
   const dirty = () => { if (dataFile && !saveTimer) { saveTimer = setTimeout(flush, 400); saveTimer.unref?.(); } };
   if (dataFile) {
     const t = now();
-    for (const { room, last } of loadRooms(dataFile, t)) rooms.set(room.code, { room, conns: new Map(), last, hostAwaySince: t });
-    if (rooms.size > 0) console.log(`${rooms.size} salle(s) restaurée(s) depuis ${dataFile}`);
+    for (const x of loadRooms(dataFile, t)) {
+      rooms.set(x.room.code, makeEntry(x.room, { last: x.last, hostAwaySince: t, pw: x.pw, bannedIps: new Set(x.bannedIps), push: new Map(x.push), statsKey: x.statsKey }));
+    }
+    if (rooms.size > 0) log('info', 'rooms_restored', { rooms: rooms.size });
   }
 
   const deps = () => ({
@@ -196,6 +290,7 @@ export function createGameServer({
     themes: E.BUILTIN_THEMES, missions: E.MISSION_POOL,
   });
   const send = (ws, msg) => ws.send(JSON.stringify(msg));
+  const fail = (ws, message, code) => send(ws, { t: 'error', message, ...(code ? { code } : {}) });
 
   function newCode() {
     for (let n = 0; n < 200; n++) {
@@ -206,13 +301,50 @@ export function createGameServer({
     throw new Error('plus de code de salle disponible');
   }
 
+  /** Effets d'un changement d'état : statistiques de compte (une fois par partie) et notifications aux joueurs hors ligne. */
+  function afterChange(entry) {
+    const room = entry.room;
+    const before = entry.snap; const after = snapOf(room);
+    entry.snap = after;
+    const o = E.outcomeOf(room);
+    if (o && entry.statsKey !== o.key) {
+      entry.statsKey = o.key;
+      metrics.inc('games_finished');
+      for (const p of o.players) if (p.account) accounts.record(p.account, p.won);
+      log('info', 'game_finished', { room: room.code, round: room.round, players: o.players.length });
+    }
+    if (entry.push.size === 0) return;
+    let body = null;
+    if (after.games !== before.games) body = `La manche ${room.round} commence : lisez votre carte.`;
+    else if (after.phase === 'gameover' && before.phase !== 'gameover') body = 'La manche est terminée : découvrez les rôles.';
+    else if (after.voteKey && after.voteKey !== before.voteKey) body = 'Le vote est ouvert : à vous de voter.';
+    if (!body) return;
+    const messages = [];
+    for (const [seatId, token] of entry.push) {
+      const seat = room.seats.find((s) => s.id === seatId);
+      if (seat && !seat.connected && (room.roster.includes(seatId) || !room.game.active)) messages.push({ token, title: 'MythoMytho', body, data: { code: room.code } });
+    }
+    if (messages.length > 0) {
+      pusher.send(messages).then((dead) => {
+        for (const tk of dead) for (const [sid, v] of entry.push) if (v === tk) { entry.push.delete(sid); entry.room = E.setReachable(entry.room, sid, false); }
+        if (dead.length > 0) dirty();
+      }).catch(() => {});
+    }
+  }
+
   function broadcast(entry) {
+    afterChange(entry);
     const t = now();
+    const extra = { hasPassword: !!entry.pw };
     for (const [seatId, set] of entry.conns) {
       if (!entry.room.seats.some((s) => s.id === seatId)) continue;
-      const view = E.viewFor(entry.room, seatId, t);
+      const view = E.viewFor(entry.room, seatId, t, extra);
       for (const ws of set) send(ws, { t: 'view', view });
     }
+  }
+
+  function broadcastEvent(entry, event) {
+    for (const set of entry.conns.values()) for (const ws of set) send(ws, { t: 'event', event });
   }
 
   function attach(entry, seatId, ws, token) {
@@ -223,6 +355,7 @@ export function createGameServer({
     ws.ctx = { code: entry.room.code, seatId };
     entry.last = now();
     send(ws, { t: 'joined', code: entry.room.code, token, seatId });
+    if (entry.room.chatOn && entry.chat.length > 0) send(ws, { t: 'chatlog', items: entry.chat });
   }
 
   function detach(ws) {
@@ -244,73 +377,140 @@ export function createGameServer({
   function onMessage(ws, text) {
     try { dispatch(ws, text); } catch (err) {
       // Une entrée malformée ne doit jamais faire tomber la salle des autres joueurs.
-      console.error('message rejeté :', err && err.message);
-      if (ws.open) send(ws, { t: 'error', message: 'Message invalide.' });
+      metrics.inc('errors');
+      log('error', 'message_failed', { error: String(err && err.message) });
+      if (ws.open) fail(ws, 'Message invalide.');
     }
+  }
+
+  /** Compte lié au jeton envoyé par le client : null (aucun), { error }, ou le compte. */
+  function accountOf(msg) {
+    if (msg.account === undefined || msg.account === null || msg.account === '') return null;
+    return accounts.resolve(msg.account) ?? { error: 'Session de compte expirée : reconnectez-vous.' };
   }
 
   function dispatch(ws, text) {
     let msg;
-    try { msg = JSON.parse(text); } catch { return send(ws, { t: 'error', message: 'Message illisible.' }); }
-    if (!msg || typeof msg.t !== 'string') return send(ws, { t: 'error', message: 'Message invalide.' });
-    // Anti-inondation : 40 messages par fenêtre de 5 s et par connexion.
+    try { msg = JSON.parse(text); } catch { return fail(ws, 'Message illisible.'); }
+    if (!msg || typeof msg.t !== 'string') return fail(ws, 'Message invalide.');
+    metrics.inc('messages');
+    // Anti-inondation : `msgPer5s` messages par fenêtre de 5 s et par connexion.
     const t0 = now();
     ws.win = ws.win && t0 - ws.win.start < 5000 ? ws.win : { start: t0, n: 0 };
-    if (++ws.win.n > 40) return ws.close(1008);
+    if (++ws.win.n > L.msgPer5s) { metrics.inc('rate_limited'); log('warn', 'flood_disconnect', { ip: ws.ip }); return ws.close(1008); }
     if (msg.t === 'ping') return send(ws, { t: 'pong' });
+    if (text.length > L.maxMessage && msg.t !== 'pairs') return fail(ws, 'Message trop volumineux.');
 
     if (!ws.ctx) {
       if (msg.t === 'create') {
+        if (!lim.rooms.hit(ws.ip)) { metrics.inc('rate_limited'); log('warn', 'rooms_rate_limited', { ip: ws.ip }); return fail(ws, 'Trop de salles créées depuis cette connexion : réessayez dans quelques minutes.', 'limit'); }
+        if (rooms.size >= L.maxRooms) return fail(ws, 'Le serveur est complet : réessayez plus tard.', 'busy');
+        const acct = accountOf(msg);
+        if (acct && acct.error) return fail(ws, acct.error);
         const code = newCode();
-        const made = E.createRoom(code, msg.name, deps());
-        const entry = { room: made.room, conns: new Map(), last: now(), hostAwaySince: null };
+        const made = E.createRoom(code, acct ? acct.pseudo : msg.name, deps(), acct ? acct.id : undefined);
+        const entry = makeEntry(made.room);
+        if (msg.password) setRoomPassword(entry, msg.password);
         rooms.set(code, entry);
+        metrics.inc('rooms_created');
+        log('info', 'room_created', { room: code, protected: !!entry.pw });
         attach(entry, made.seatId, ws, made.token);
         dirty();
         return broadcast(entry);
       }
       if (msg.t === 'join' || msg.t === 'rejoin') {
+        if (!lim.joins.hit(ws.ip)) { metrics.inc('rate_limited'); log('warn', 'join_rate_limited', { ip: ws.ip }); return fail(ws, 'Trop de tentatives : patientez une minute.', 'limit'); }
         const entry = rooms.get(String(msg.code ?? '').toUpperCase().trim());
-        if (!entry) return send(ws, { t: 'error', message: 'Salle introuvable : vérifiez le code.' });
+        if (!entry) return fail(ws, 'Salle introuvable : vérifiez le code.');
         if (msg.t === 'rejoin') {
           const seat = E.findSeatByToken(entry.room, String(msg.token ?? ''));
-          if (!seat) return send(ws, { t: 'error', message: 'Session expirée : rejoignez la salle avec son code.' });
+          if (!seat) return fail(ws, 'Session expirée : rejoignez la salle avec son code.');
           entry.room = E.setConnected(entry.room, seat.id, true, hostGraceMs > 0);
           if (seat.id === entry.room.hostId) entry.hostAwaySince = null;
           attach(entry, seat.id, ws, seat.token);
           dirty();
           return broadcast(entry);
         }
-        const res = E.joinRoom(entry.room, msg.name, deps());
-        if ('error' in res) return send(ws, { t: 'error', message: res.error });
+        if (entry.bannedIps.has(ws.ip)) return fail(ws, 'Vous avez été banni de cette salle.', 'banned');
+        if (entry.pw) {
+          if (!lim.pw.hit(`${ws.ip}|${entry.room.code}`)) { metrics.inc('rate_limited'); return fail(ws, 'Trop d\'essais de mot de passe : patientez une minute.', 'limit'); }
+          if (!roomPasswordOk(entry, msg.password)) return fail(ws, msg.password ? 'Mot de passe incorrect.' : 'Cette salle est protégée par un mot de passe.', 'password');
+        }
+        const acct = accountOf(msg);
+        if (acct && acct.error) return fail(ws, acct.error);
+        if (acct && entry.room.seats.some((s) => s.account === acct.id)) return fail(ws, 'Ce compte est déjà dans la salle.');
+        const res = E.joinRoom(entry.room, acct ? acct.pseudo : msg.name, deps(), acct ? acct.id : undefined);
+        if ('error' in res) return fail(ws, res.error, res.code);
         entry.room = res.room;
         attach(entry, res.seatId, ws, res.token);
         dirty();
         return broadcast(entry);
       }
-      return send(ws, { t: 'error', message: 'Rejoignez d\'abord une salle.' });
+      return fail(ws, 'Rejoignez d\'abord une salle.');
     }
 
     const entry = rooms.get(ws.ctx.code);
-    if (!entry) { ws.ctx = null; return send(ws, { t: 'error', message: 'La salle n\'existe plus.' }); }
+    if (!entry) { ws.ctx = null; return fail(ws, 'La salle n\'existe plus.'); }
     const seatId = ws.ctx.seatId;
+    const seat = entry.room.seats.find((s) => s.id === seatId);
+    if (!seat) { ws.ctx = null; return fail(ws, 'Vous n\'êtes plus dans cette salle.'); }
+
+    // Messages traités par le serveur lui-même (ils ne modifient pas l'état du moteur de salle).
+    if (msg.t === 'chat' || msg.t === 'react') {
+      const bucket = (ws.lim ??= {
+        chat: createLimiter({ max: L.chatPer10s, windowMs: 10000, now }), react: createLimiter({ max: L.reactPer10s, windowMs: 10000, now }),
+      })[msg.t];
+      if (!bucket.hit('x')) { metrics.inc('rate_limited'); return fail(ws, 'Doucement : trop de messages à la suite.', 'limit'); }
+      if (msg.t === 'react') {
+        if (!E.isReaction(msg.emoji)) return fail(ws, 'Réaction inconnue.');
+        return broadcastEvent(entry, { kind: 'react', seatId, name: seat.name, emoji: msg.emoji, at: now() });
+      }
+      const block = E.chatBlock(entry.room, seatId);
+      if (block) return fail(ws, block);
+      const clean = E.cleanChat(msg.text);
+      if (!clean) return;
+      const event = { kind: 'chat', seatId, name: seat.name, text: clean, at: now() };
+      entry.chat.push(event); if (entry.chat.length > 40) entry.chat.shift();
+      return broadcastEvent(entry, event);
+    }
+    if (msg.t === 'push') {
+      if (msg.token === null) { entry.push.delete(seatId); entry.room = E.setReachable(entry.room, seatId, false); }
+      else if (typeof msg.token === 'string' && PUSH_TOKEN.test(msg.token)) { entry.push.set(seatId, msg.token); entry.room = E.setReachable(entry.room, seatId, true); }
+      else return fail(ws, 'Jeton de notification invalide.');
+      return dirty();
+    }
+    if (msg.t === 'password') {
+      if (entry.room.hostId !== seatId) return fail(ws, 'Seul l\'hôte peut faire cela.');
+      setRoomPassword(entry, msg.password);
+      dirty();
+      return broadcast(entry);
+    }
+
+    // Bannir : on retient aussi les adresses du joueur renvoyé (salle uniquement ; une adresse partagée est donc bannie pour cette salle seulement).
+    const banIps = msg.t === 'ban' && entry.room.hostId === seatId ? [...(entry.conns.get(msg.seatId) ?? [])].map((s) => s.ip) : [];
+
     const out = E.handle(entry.room, seatId, msg, deps());
     entry.last = now();
-    if (out.error) return send(ws, { t: 'error', message: out.error });
+    if (out.error) return fail(ws, out.error);
     entry.room = out.room;
+    if (msg.t === 'ban') { for (const ip of banIps) if (ip) entry.bannedIps.add(ip); log('info', 'player_banned', { room: entry.room.code }); }
 
-    // Siège retiré (renvoi par l'hôte, départ volontaire) : on prévient et on libère la connexion.
+    // Siège retiré (renvoi, bannissement, départ volontaire) : on prévient et on libère la connexion.
     for (const [sid, set] of [...entry.conns]) {
       if (entry.room.seats.some((s) => s.id === sid)) continue;
-      for (const sock of set) { if (msg.t === 'kick') send(sock, { t: 'error', message: 'L\'hôte vous a retiré du salon.' }); sock.ctx = null; }
-      entry.conns.delete(sid);
+      for (const sock of set) {
+        if (msg.t === 'kick') send(sock, { t: 'error', message: 'L\'hôte vous a retiré du salon.' });
+        if (msg.t === 'ban') send(sock, { t: 'error', message: 'Vous avez été banni de cette salle.', code: 'banned' });
+        sock.ctx = null;
+      }
+      entry.conns.delete(sid); entry.push.delete(sid);
     }
     if (entry.room.seats.length === 0) { rooms.delete(entry.room.code); dirty(); return; }
     broadcast(entry); dirty();
   }
 
   /**
-   * Horloge des salles : fin de minuteur constatée par le serveur, et passage d'hôte quand l'hôte est absent depuis plus de `hostGraceMs`.
+   * Horloge des salles : fin de minuteur / de vote constatée par le serveur, et passage d'hôte quand l'hôte est absent depuis plus de `hostGraceMs`.
    * Exposée pour les tests (horloge injectée) ; appelée chaque seconde en service.
    */
   function tickRooms() {
@@ -330,8 +530,107 @@ export function createGameServer({
   const clock = setInterval(tickRooms, tickMs);
   clock.unref?.();
 
+  /* ---- API HTTP : comptes, classement, statistiques */
+
+  const json = (res, status, body, extra = {}) => {
+    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...extra });
+    res.end(body === null ? undefined : JSON.stringify(body));
+  };
+
+  /** En-têtes CORS : l'application native (ou le web en développement) appelle l'API depuis une autre origine. Renvoie false si l'origine est refusée. */
+  function cors(req, res) {
+    const origin = req.headers.origin;
+    if (!origin) return true;
+    let same = false; try { same = new URL(origin).host === req.headers.host; } catch { /* origine illisible */ }
+    if (allowedOrigins && !same && !allowedOrigins.includes(origin)) return false;
+    res.setHeader('access-control-allow-origin', origin);
+    res.setHeader('vary', 'Origin');
+    res.setHeader('access-control-allow-headers', 'content-type, authorization');
+    res.setHeader('access-control-allow-methods', 'GET, POST, DELETE, OPTIONS');
+    res.setHeader('access-control-max-age', '600');
+    return true;
+  }
+
+  function readJson(req, max = 4096) {
+    return new Promise((resolve, reject) => {
+      let size = 0; let over = false; const chunks = [];
+      const tooBig = () => { if (!over) { over = true; reject(Object.assign(new Error('trop gros'), { status: 413 })); } };
+      if (Number(req.headers['content-length']) > max) tooBig();
+      // Au-delà de la limite on cesse de stocker ; la connexion est fermée une fois la réponse 413 envoyée.
+      req.on('data', (c) => { size += c.length; if (size > max) tooBig(); else if (!over) chunks.push(c); });
+      req.on('end', () => { if (over) return; try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}); } catch { reject(Object.assign(new Error('JSON invalide'), { status: 400 })); } });
+      req.on('error', reject);
+    });
+  }
+
+  const bearer = (req) => { const h = String(req.headers.authorization ?? ''); return h.startsWith('Bearer ') ? h.slice(7).trim() : ''; };
+
+  function gauges() {
+    let connected = 0; let inGame = 0;
+    for (const e of rooms.values()) { connected += e.conns.size; if (e.room.game.active) inGame++; }
+    const mem = process.memoryUsage();
+    return { rooms: rooms.size, rooms_in_game: inGame, seats_connected: connected, sockets: sockets.size, accounts: accounts.count, uptime_seconds: metrics.uptimeSec(), rss_bytes: mem.rss, heap_used_bytes: mem.heapUsed };
+  }
+
+  async function handleApi(req, res, ip) {
+    if (!cors(req, res)) return json(res, 403, { error: 'Origine refusée.' });
+    if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+    metrics.inc('http_api');
+    if (!lim.api.hit(ip)) { metrics.inc('rate_limited'); return json(res, 429, { error: 'Trop de requêtes : patientez une minute.' }, { 'retry-after': '60' }); }
+    const url = new URL(req.url, 'http://x');
+    const route = `${req.method} ${url.pathname}`;
+    try {
+      if (route === 'GET /api/leaderboard') return json(res, 200, { players: accounts.leaderboard(Number(url.searchParams.get('limit')) || 20) });
+      if (route === 'GET /api/me') {
+        const acct = accounts.resolve(bearer(req));
+        return acct ? json(res, 200, { account: acct }) : json(res, 401, { error: 'Non connecté.' });
+      }
+      if (route === 'POST /api/register' || route === 'POST /api/login') {
+        const register = route.endsWith('register');
+        if (!(register ? lim.register : lim.login).hit(ip)) { metrics.inc('rate_limited'); log('warn', register ? 'register_rate_limited' : 'login_rate_limited', { ip }); return json(res, 429, { error: 'Trop de tentatives : réessayez plus tard.' }, { 'retry-after': '60' }); }
+        const body = await readJson(req);
+        const out = register ? await accounts.register(body.pseudo, body.password) : await accounts.login(body.pseudo, body.password);
+        if (out.error) {
+          if (!register) { metrics.inc('login_failed'); log('warn', 'login_failed', { ip }); }
+          return json(res, out.conflict ? 409 : register ? 400 : 401, { error: out.error });
+        }
+        metrics.inc(register ? 'accounts_registered' : 'logins');
+        return json(res, register ? 201 : 200, out);
+      }
+      if (route === 'POST /api/logout') { accounts.logout(bearer(req)); return json(res, 204, null); }
+      if (route === 'DELETE /api/account') {
+        const body = await readJson(req);
+        const out = await accounts.remove(bearer(req), body.password);
+        if (out.error) return json(res, out.error === 'Non connecté.' ? 401 : 403, { error: out.error });
+        metrics.inc('accounts_deleted');
+        return json(res, 204, null);
+      }
+      return json(res, 404, { error: 'Introuvable.' });
+    } catch (err) {
+      if (err && err.status) {
+        if (err.status === 413) res.on('finish', () => req.socket.destroy());
+        return json(res, err.status, { error: err.status === 413 ? 'Requête trop volumineuse.' : 'Requête invalide.' }, err.status === 413 ? { connection: 'close' } : {});
+      }
+      metrics.inc('errors'); log('error', 'api_failed', { error: String(err && err.message) });
+      return json(res, 500, { error: 'Erreur du serveur.' });
+    }
+  }
+
+  function handleAdmin(req, res) {
+    if (!adminToken) return false;
+    const url = new URL(req.url, 'http://x');
+    if (url.pathname !== '/stats' && url.pathname !== '/metrics') return false;
+    if (!safeEqualText(bearer(req), adminToken)) { res.writeHead(401, { 'www-authenticate': 'Bearer' }); res.end(); return true; }
+    if (url.pathname === '/metrics') { res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4; charset=utf-8', 'cache-control': 'no-store' }); res.end(metrics.prometheus(gauges())); return true; }
+    json(res, 200, { gauges: gauges(), counters: metrics.counters(), node: process.version });
+    return true;
+  }
+
   const server = http.createServer((req, res) => {
-    if (req.url === '/health') { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ ok: true, rooms: rooms.size })); }
+    const ip = clientIp(req, trustProxyHops);
+    if (req.url === '/health') { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); return res.end(JSON.stringify({ ok: true, rooms: rooms.size })); }
+    if (req.url.startsWith('/api/')) { void handleApi(req, res, ip); return; }
+    if (handleAdmin(req, res)) return;
     if (staticDir && serveStatic(staticDir, req, res)) return;
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     res.end(staticDir ? 'Introuvable.' : 'MythoMytho — serveur de parties (WebSocket).');
@@ -341,25 +640,42 @@ export function createGameServer({
     // Liste blanche d'origines ; la page servie par ce même serveur (origine = Host de la requête) est toujours acceptée.
     const sameOrigin = (() => { try { return !!origin && new URL(origin).host === req.headers.host; } catch { return false; } })();
     if (allowedOrigins && !sameOrigin && (!origin || !allowedOrigins.includes(origin))) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); return; }
+    const ip = clientIp(req, trustProxyHops);
+    if ((ipConns.get(ip) ?? 0) >= L.connsPerIp || !lim.conns.hit(ip)) {
+      metrics.inc('rate_limited'); log('warn', 'connection_refused', { ip });
+      socket.end('HTTP/1.1 429 Too Many Requests\r\nRetry-After: 60\r\n\r\n'); return;
+    }
     const ws = acceptWebSocket(req, socket, {
       message: onMessage,
-      close: (sock) => { sockets.delete(sock); detach(sock); },
+      close: (sock) => {
+        sockets.delete(sock); detach(sock);
+        const n = (ipConns.get(sock.ip) ?? 1) - 1; if (n <= 0) ipConns.delete(sock.ip); else ipConns.set(sock.ip, n);
+      },
     });
-    if (ws) sockets.add(ws);
+    if (ws) { ws.ip = ip; ws.born = now(); sockets.add(ws); ipConns.set(ip, (ipConns.get(ip) ?? 0) + 1); metrics.inc('connections'); }
   });
 
   // Battement : une socket muette depuis 2 cycles est coupée (la salle la verra comme déconnectée).
   const beat = setInterval(() => {
-    for (const ws of sockets) { if (!ws.alive) { ws.terminate(); continue; } ws.alive = false; ws.ping(); }
     const t = now();
+    for (const ws of sockets) {
+      if (!ws.alive) { ws.terminate(); continue; }
+      // Une connexion qui ne rejoint aucune salle en 60 s ne sert à rien : on la libère (elle compte dans la limite par adresse).
+      if (!ws.ctx && t - ws.born > 60000) { ws.close(1008); continue; }
+      ws.alive = false; ws.ping();
+    }
     let purged = false;
-    for (const [code, entry] of rooms) if (entry.conns.size === 0 && t - entry.last > roomTtlMs) { rooms.delete(code); purged = true; }
+    for (const [code, entry] of rooms) if (entry.conns.size === 0 && t - entry.last > roomTtlMs) { rooms.delete(code); purged = true; log('info', 'room_expired', { room: code }); }
     if (purged) dirty();
+    for (const l of Object.values(lim)) l.sweep();
+    accounts.sweep(); pusher.sweep();
   }, 20000);
   beat.unref?.();
 
   return {
-    server, rooms, tick: tickRooms, flush,
+    server, rooms, accounts, metrics, tick: tickRooms, flush,
+    /** Diffuse l'état courant d'une salle (tests : après avoir modifié `rooms.get(code).room` directement). */
+    touch: (code) => { const e = rooms.get(code); if (e) { broadcast(e); dirty(); } },
     listen: (port = 0, host = '0.0.0.0') => new Promise((resolve) => server.listen(port, host, () => resolve(server.address().port))),
     close: () => new Promise((resolve) => { clearInterval(beat); clearInterval(clock); flush(); for (const ws of sockets) ws.terminate(); server.close(() => resolve()); }),
   };
@@ -371,7 +687,12 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const staticDir = process.env.STATIC_DIR ?? path.join(here, '..', 'dist');
   const hasApp = fs.existsSync(path.join(staticDir, 'index.html'));
   const dataDir = process.env.DATA_DIR;
-  const srv = createGameServer({ allowedOrigins: origins, staticDir: hasApp ? staticDir : null, dataFile: dataDir ? path.join(dataDir, 'rooms.json') : null });
+  const srv = createGameServer({
+    allowedOrigins: origins, staticDir: hasApp ? staticDir : null,
+    dataFile: dataDir ? path.join(dataDir, 'rooms.json') : null, accountsFile: dataDir ? path.join(dataDir, 'accounts.json') : null,
+    trustProxyHops: Number(process.env.TRUST_PROXY ?? 0) || 0, adminToken: process.env.ADMIN_TOKEN || null,
+    logger: { level: process.env.LOG_LEVEL || 'info' },
+  });
   const port = await srv.listen(Number(process.env.PORT ?? 8787));
   // Arrêt propre (Docker, Render, Fly envoient SIGTERM) : dernière sauvegarde puis sortie.
   for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { srv.flush(); process.exit(0); });
